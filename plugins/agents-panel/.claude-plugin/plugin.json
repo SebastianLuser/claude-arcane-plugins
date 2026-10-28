@@ -1,0 +1,35 @@
+{
+  "name": "agents-panel",
+  "version": "1.2.1-es.1",
+  "description": "Copia de savvy-progress (johnnyvizz, MIT) en español: panel de agentes (/agents-info) con modelo, en qué trabaja cada uno y tiempo, sin costo ni tokens.",
+  "author": {
+    "name": "sebas (basado en johnnyvizz)"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Panel language",
+      "description": "auto sigue el idioma de Claude Code y después el del sistema; es, en, ru o he",
+      "default": "es",
+      "options": [
+        "auto",
+        "es",
+        "en",
+        "ru",
+        "he"
+      ]
+    },
+    "autoOpen": {
+      "type": "string",
+      "title": "Open the agents panel",
+      "description": "savvy: when a savvy-flow worker starts or a plan is reported; any: also when any other subagent starts",
+      "default": "any",
+      "options": [
+        "savvy",
+        "any"
+      ]
+    }
+  },
+  "license": "MIT"
+}

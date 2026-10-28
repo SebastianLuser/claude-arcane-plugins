@@ -1,0 +1,7 @@
+{
+  "name": "assumption-check",
+  "version": "0.1.0",
+  "description": "Claude anota cada suposición que hace mientras trabaja; arriba del cuadro de texto las marcás como bien o mal, y las mal vuelven a Claude con tu corrección.",
+  "author": { "name": "sebas" },
+  "types": "./types/index.d.ts"
+}

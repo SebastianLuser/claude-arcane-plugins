@@ -1,0 +1,7 @@
+{
+  "name": "idea-shelf",
+  "version": "0.2.0",
+  "description": "Estante de ideas por proyecto, arriba del cuadro de texto: /idea abre la caja para anotar sin interrumpir a Claude, y cada idea se manda después con un botón.",
+  "author": { "name": "sebas" },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,43 @@
+{
+  "name": "claude-arcane-plugins",
+  "owner": {
+    "name": "sebas"
+  },
+  "metadata": {
+    "description": "Mods personales de Claude Code de sebas"
+  },
+  "plugins": [
+    {
+      "name": "agents-panel",
+      "source": "./plugins/agents-panel",
+      "description": "Panel de agentes en español: modelo, en qué trabaja cada uno y tiempo.",
+      "license": "MIT"
+    },
+    {
+      "name": "file-tree",
+      "source": "./plugins/file-tree",
+      "description": "Árbol de archivos con íconos de colores que muestra qué toca Claude.",
+      "license": "MIT"
+    },
+    {
+      "name": "assumption-check",
+      "source": "./plugins/assumption-check",
+      "description": "Claude anota cada suposición que hace; arriba del prompt las marcás como bien o mal y las mal vuelven con tu corrección."
+    },
+    {
+      "name": "idea-shelf",
+      "source": "./plugins/idea-shelf",
+      "description": "Estante de ideas por proyecto arriba del prompt: /idea anota sin interrumpir a Claude y cada idea se manda después con un botón."
+    },
+    {
+      "name": "prompt-enhancer",
+      "source": "./plugins/prompt-enhancer",
+      "description": "Mejorá tu pedido antes de enviarlo (/mejorar)."
+    },
+    {
+      "name": "shared-folder",
+      "source": "./plugins/shared-folder",
+      "description": "Mirá qué hacen otras sesiones en la misma carpeta (/compartida)."
+    }
+  ]
+}
