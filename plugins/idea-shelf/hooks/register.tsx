@@ -10,7 +10,7 @@ const shelf = atom(
   { shape: 'shelf-2' },
 )
 
-const showCount = ($: EngineInterface, n: number) => $.ui.status(n ? `💡 ${n} ${n === 1 ? 'guardada' : 'guardadas'}` : undefined)
+const showCount = ($: EngineInterface, n: number) => $.ui.status(n ? `💡 ${n} ${n === 1 ? 'idea saved' : 'ideas saved'}` : undefined)
 
 // The store keeps ideas between sessions; the atom is what the band draws.
 async function save($: EngineInterface, ideas: Idea[]): Promise<void> {
@@ -35,7 +35,7 @@ async function send($: EngineInterface, idea: Idea): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'idea', description: 'Abre o cierra el estante de ideas; /idea <texto> guarda una idea al toque' })
+    await $.command.register({ name: 'idea', description: 'Open or close the idea shelf; /idea <text> saves an idea right away' })
     const project = await $.session.cwd()
     const ideas = asIdeas(await $.store.get(shelfKey(project)))
     await update($, shelf, s => ({ ...s, project, ideas }))
@@ -48,10 +48,10 @@ export const register: Register = on => {
     if (!text) {
       const { isOpen } = await read($, shelf)
       await update($, shelf, s => ({ ...s, isOpen: !isOpen }))
-      return { text: isOpen ? 'Estante cerrado.' : 'Estante abierto, arriba del cuadro de texto.' }
+      return { text: isOpen ? 'Shelf closed.' : 'Shelf open, above the prompt box.' }
     }
     const count = await add($, text)
-    return { text: `💡 Guardada. Hay ${count} en el estante.` }
+    return { text: `💡 Saved. ${count} on the shelf.` }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -68,20 +68,20 @@ export const register: Register = on => {
           <Text bold>{'+ : '}</Text>
           <Box flexGrow={1}>
             <Input
-              key="nueva"
-              placeholder="Nueva idea…"
-              submitLabel="guardar"
+              key="new"
+              placeholder="New idea…"
+              submitLabel="save"
               value={draft}
               onInput={(v: string) => void update($, shelf, s => ({ ...s, draft: v }))}
               onSubmit={(v: string) => void add($, v).then(() => update($, shelf, s => ({ ...s, draft: '' })))}
             />
           </Box>
         </Box>
-        {ideas.length === 0 ? <Text dimColor>Estante vacío. Agregá con /idea texto.</Text> : null}
+        {ideas.length === 0 ? <Text dimColor>Shelf empty. Add with /idea <text>.</Text> : null}
         {ideas.map(idea => (
           <Box key={idea.id} flexDirection="row" flexWrap="wrap" gap={1}>
-            <Button key={`enviar-${idea.id}`} label="Enviar" onPress={() => void send($, idea)} />
-            <Button key={`borrar-${idea.id}`} label="×" onPress={() => void save($, removeIdea(ideas, idea.id))} />
+            <Button key={`send-${idea.id}`} label="Send" onPress={() => void send($, idea)} />
+            <Button key={`remove-${idea.id}`} label="×" onPress={() => void save($, removeIdea(ideas, idea.id))} />
             <Text>{idea.text}</Text>
           </Box>
         ))}

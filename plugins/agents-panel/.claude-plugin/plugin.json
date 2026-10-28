@@ -1,7 +1,7 @@
 {
   "name": "agents-panel",
   "version": "1.2.1-es.1",
-  "description": "Agents panel (/agents-info): running, finished and planned subagents with model, what each is working on and time. Spanish UI, no cost or token counts. Based on savvy-progress by johnnyvizz (MIT).",
+  "description": "Agents panel (/agents-info): running, finished and planned subagents with model, what each is working on and time. No cost or token counts. Based on savvy-progress by johnnyvizz (MIT).",
   "author": {
     "name": "sebas (based on johnnyvizz)"
   },
@@ -10,11 +10,10 @@
     "language": {
       "type": "string",
       "title": "Panel language",
-      "description": "auto follows Claude Code's language setting, then the system locale; es, en, ru or he (Hebrew, drawn right to left)",
-      "default": "es",
+      "description": "auto follows Claude Code's language setting, then the system locale; en, ru or he (Hebrew, drawn right to left)",
+      "default": "auto",
       "options": [
         "auto",
-        "es",
         "en",
         "ru",
         "he"

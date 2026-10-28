@@ -24,19 +24,19 @@ async function refresh($: EngineInterface): Promise<void> {
   const rows = (await Promise.all(keys.map(k => $.store.get(k)))).filter(isPeer)
   const others = othersOf(rows, me.id, await $.clock.now())
   await update($, folder, f => ({ ...f, others }))
-  $.ui.status(others.length ? `👥 ${others.length} ${others.length === 1 ? 'otra sesión' : 'otras sesiones'} en esta carpeta` : undefined)
+  $.ui.status(others.length ? `👥 ${others.length} other ${others.length === 1 ? 'session' : 'sessions'} in this folder` : undefined)
 }
 
 const details = (others: Peer[]): string =>
   others.length === 0
-    ? 'No hay otras sesiones trabajando en esta carpeta.'
+    ? 'No other sessions are working in this folder.'
     : others
-        .map(p => `${p.isWorking ? '● trabajando' : '○ esperando'} · ${clip(p.prompt, 200) || '(sin pedido todavía)'}${p.doing ? `\n   ◆ ${p.doing}` : ''}`)
+        .map(p => `${p.isWorking ? '● working' : '○ waiting'} · ${clip(p.prompt, 200) || '(no prompt yet)'}${p.doing ? `\n   ◆ ${p.doing}` : ''}`)
         .join('\n')
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'compartida', description: 'Muestra qué hacen las otras sesiones de esta carpeta; /compartida ocultar o mostrar' })
+    await $.command.register({ name: 'shared', description: 'Show what the other sessions in this folder are doing; /shared hide or show' })
     me = { cwd: await $.session.cwd(), id: await $.session.id(), prompt: '', isWorking: false, doing: '' }
     await publish($)
     await refresh($)
@@ -76,11 +76,11 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'compartida' }, async ($, e) => {
+  on('command.run', { command: 'shared' }, async ($, e) => {
     const arg = (e.args ?? '').trim().toLowerCase()
-    if (arg === 'ocultar' || arg === 'mostrar') {
-      await update($, folder, f => ({ ...f, isHidden: arg === 'ocultar' }))
-      return { text: arg === 'ocultar' ? 'Aviso oculto.' : 'Aviso visible.' }
+    if (arg === 'hide' || arg === 'show') {
+      await update($, folder, f => ({ ...f, isHidden: arg === 'hide' }))
+      return { text: arg === 'hide' ? 'Notice hidden.' : 'Notice shown.' }
     }
     await refresh($)
     return { text: details((await read($, folder)).others) }
@@ -96,17 +96,17 @@ export const register: Register = on => {
       <Box flexDirection="column">
         <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
           <Box flexDirection="row" flexWrap="wrap" gap={1}>
-            <Text bold>👥 También trabajando en esta carpeta</Text>
-            <Text dimColor>· /compartida para el detalle</Text>
+            <Text bold>👥 Also working in this folder</Text>
+            <Text dimColor>· /shared for details</Text>
             <Box flexGrow={1} />
-            <Button key="ocultar" plain dimColor label="ocultar" onPress={() => void update($, folder, f => ({ ...f, isHidden: true }))} />
+            <Button key="hide" plain dimColor label="hide" onPress={() => void update($, folder, f => ({ ...f, isHidden: true }))} />
           </Box>
           {others.map(p => (
             <Box key={p.id} flexDirection="column">
               <Text>
                 <Text color={p.isWorking ? 'yellow' : 'gray'}>{p.isWorking ? '● ' : '○ '}</Text>
-                <Text bold>{clip(p.prompt) || '(sin pedido todavía)'}</Text>
-                <Text dimColor>{p.isWorking ? ' · trabajando' : ' · esperando'}</Text>
+                <Text bold>{clip(p.prompt) || '(no prompt yet)'}</Text>
+                <Text dimColor>{p.isWorking ? ' · working' : ' · waiting'}</Text>
               </Text>
               {p.doing ? <Text color="yellow">{`   ◆ ${p.doing}`}</Text> : null}
             </Box>

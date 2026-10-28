@@ -1893,7 +1893,7 @@ export const register: Register = (on, options) => {
   splitAt = options?.split === 'top' ? 'top' : 'bottom'
   on('session.start', async ($, e, next) => {
     cached ??= { ...emptyTree(''), ...(await $.state.get(TREE)).value }
-    await $.command.register({ name: 'arbol', description: 'Show or hide the file tree; args: [path | open] (no path = cwd, open = never hide)' })
+    await $.command.register({ name: 'tree', description: 'Show or hide the file tree; args: [path | open] (no path = cwd, open = never hide)' })
     if (palette.unknown.length) void $.ui.toast(`filetree palette: ignored ${palette.unknown.join(' ')}; use key=#hex with fg, bg, accent, muted, urgent, selection, hover, added, modified, renamed, add or del`)
     const windows = (await $.env.get('OS')) === 'Windows_NT'
     terminalSession = (await $.env.get('CLAUDE_CODE_ENTRYPOINT')) !== 'claude-desktop'
@@ -1945,7 +1945,7 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('command.run', { command: 'arbol' }, async ($, e) => {
+  on('command.run', { command: 'tree' }, async ($, e) => {
     const given = (e.args ?? '').trim()
     if (!given && (await $.ui.panes().catch(() => [])).some(p => p.id === PANE && p.isShown)) {
       noDock = true
@@ -2196,7 +2196,7 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column" backgroundColor={theme.bg || undefined}>
           <Box flexDirection="row" gap={1}>
-            {button({ id: 'expand', label: '▸ árbol', dim: false })}
+            {button({ id: 'expand', label: '▸ tree', dim: false })}
             {button({ id: 'close', label: '✕', dim: true })}
           </Box>
           <Text {...mutedText}>{(t.root.split('/').pop() || t.root).slice(0, MINI_COLUMNS - 2)}</Text>
@@ -2305,18 +2305,18 @@ export const register: Register = (on, options) => {
     }
     const rootCounts = t.top ? countSegs(t.counts[t.root]) : []
     const plainButtons = [
-      ...(t.selected ? [{ id: 'unselect', label: unicode ? '⊘' : '\u{eabd}', dim: false, hint: 'quitar selección' }] : []),
-      { id: 'up', label: unicode ? '⬆ atrás' : '\u{ebff}', dim: false, hint: 'subir a la carpeta de arriba' },
-      { id: 'cwd', label: unicode ? '◎' : '\u{eb06}', dim: !follow, hint: 'volver a la carpeta de trabajo' },
-      { id: 'refresh', label: unicode ? '↻' : '\u{eb37}', dim: true, hint: 'recargar árbol y git' },
-      { id: 'hidden', label: unicode ? (t.showHidden ? '⊙' : '○') : t.showHidden ? '\u{f0b95}' : '\u{eae7}', dim: !t.showHidden, hint: t.showHidden ? 'ocultar archivos ocultos' : 'mostrar archivos ocultos' },
-      { id: 'size', label: unicode ? '◫' : '\u{ea90}', dim: t.column === 'date', hint: t.column === 'date' ? 'mostrar tamaños' : t.column === 'size' ? 'mostrar líneas de código' : 'mostrar fechas' },
-      { id: 'collapse', label: unicode ? '⊟' : '\u{eac5}', dim: true, hint: 'contraer todo' },
+      ...(t.selected ? [{ id: 'unselect', label: unicode ? '⊘' : '\u{eabd}', dim: false, hint: 'clear selection' }] : []),
+      { id: 'up', label: unicode ? '⬆ back' : '\u{ebff}', dim: false, hint: 'parent folder' },
+      { id: 'cwd', label: unicode ? '◎' : '\u{eb06}', dim: !follow, hint: 'follow the cwd' },
+      { id: 'refresh', label: unicode ? '↻' : '\u{eb37}', dim: true, hint: 'reload tree and git' },
+      { id: 'hidden', label: unicode ? (t.showHidden ? '⊙' : '○') : t.showHidden ? '\u{f0b95}' : '\u{eae7}', dim: !t.showHidden, hint: t.showHidden ? 'hide hidden files' : 'show hidden files' },
+      { id: 'size', label: unicode ? '◫' : '\u{ea90}', dim: t.column === 'date', hint: t.column === 'date' ? 'show sizes' : t.column === 'size' ? 'show lines of code' : 'show dates' },
+      { id: 'collapse', label: unicode ? '⊟' : '\u{eac5}', dim: true, hint: 'collapse all' },
       ...(nativeScroll ? [] : [{ id: 'split', label: unicode ? '⊡' : splitAt === 'top' ? '\u{ebf6}' : '\u{ec01}', dim: !t.split, hint: t.split ? 'hide preview' : 'show preview' }]),
       ...(e.surface === 'terminal'
         ? [
-            { id: 'mini', label: '◂', dim: true, hint: 'achicar a una franja' },
-            { id: 'close', label: '✕', dim: false, hint: 'cerrar (/arbol lo abre)' },
+            { id: 'mini', label: '◂', dim: true, hint: 'shrink to a strip' },
+            { id: 'close', label: '✕', dim: false, hint: 'close (/tree opens it)' },
           ]
         : []),
     ]
@@ -2710,8 +2710,8 @@ export const register: Register = (on, options) => {
           <Box flexGrow={1}>
             <Input
               key="q"
-              placeholder="buscar archivo o carpeta"
-              submitLabel="ir"
+              placeholder="search files and folders"
+              submitLabel="go"
               value={t.query}
               onInput={(v: string) => void search($, v)}
               onSubmit={(v: string) => void jump($, v).then(() => $.clock.after(100, park))}

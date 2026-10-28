@@ -20,7 +20,7 @@ async function projectNotes($: EngineInterface): Promise<string> {
 async function enhance($: EngineInterface): Promise<void> {
   const { text } = await $.prompt.read()
   if (!text.trim()) {
-    await update($, enhancer, s => ({ ...s, status: 'error', note: 'Escribí algo en el cuadro primero' }))
+    await update($, enhancer, s => ({ ...s, status: 'error', note: 'Type something in the prompt box first' }))
     return
   }
   await update($, enhancer, s => ({ ...s, status: 'working', note: '' }))
@@ -37,11 +37,11 @@ async function enhance($: EngineInterface): Promise<void> {
     })
   }
   if (!reply.isAnswered) {
-    await update($, enhancer, s => ({ ...s, status: 'error', note: `No pude mejorarlo (${reply.reason})` }))
+    await update($, enhancer, s => ({ ...s, status: 'error', note: `Could not enhance it (${reply.reason})` }))
     return
   }
   await $.prompt.fill({ text: cleanReply(reply.text), mode: 'replace' })
-  await update($, enhancer, s => ({ ...s, status: 'ready', note: 'Mejorado: revisalo y tocá Enviar' }))
+  await update($, enhancer, s => ({ ...s, status: 'ready', note: 'Enhanced: review it and press Send' }))
 }
 
 async function send($: EngineInterface): Promise<void> {
@@ -54,14 +54,14 @@ async function send($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'mejorar', description: 'Muestra u oculta la barra para mejorar el prompt antes de enviarlo' })
+    await $.command.register({ name: 'enhance', description: 'Show or hide the bar that enhances a prompt before sending it' })
     return next(e)
   })
 
-  on('command.run', { command: 'mejorar' }, async $ => {
+  on('command.run', { command: 'enhance' }, async $ => {
     const { isHidden } = await read($, enhancer)
     await update($, enhancer, s => ({ ...s, isHidden: !isHidden }))
-    return { text: isHidden ? 'Barra para mejorar prompts visible.' : 'Barra para mejorar prompts oculta.' }
+    return { text: isHidden ? 'Prompt enhancer bar shown.' : 'Prompt enhancer bar hidden.' }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -74,9 +74,9 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" flexWrap="wrap" gap={1} marginBottom={1}>
-          <Text bold>Mejorar prompt</Text>
-          <Button key="mejorar" label={isWorking ? 'Mejorando…' : 'Mejorar'} onPress={() => void (isWorking ? undefined : enhance($))} />
-          <Button key="enviar" label="Enviar" onPress={() => void send($)} />
+          <Text bold>Prompt enhancer</Text>
+          <Button key="enhance" label={isWorking ? 'Enhancing…' : 'Enhance'} onPress={() => void (isWorking ? undefined : enhance($))} />
+          <Button key="send" label="Send" onPress={() => void send($)} />
           {note ? <Text dimColor={status !== 'error'} color={status === 'error' ? 'red' : undefined}>{note}</Text> : null}
         </Box>
         {below}

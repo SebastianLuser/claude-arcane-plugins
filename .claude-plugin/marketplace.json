@@ -22,7 +22,7 @@
     {
       "name": "assumption-check",
       "source": "./plugins/assumption-check",
-      "description": "Review Claude's assumptions and correct the wrong ones (/supuestos)."
+      "description": "Review Claude's assumptions and correct the wrong ones (/assumptions)."
     },
     {
       "name": "idea-shelf",
@@ -32,12 +32,12 @@
     {
       "name": "prompt-enhancer",
       "source": "./plugins/prompt-enhancer",
-      "description": "Enhance your prompt before sending it (/mejorar)."
+      "description": "Enhance your prompt before sending it (/enhance)."
     },
     {
       "name": "shared-folder",
       "source": "./plugins/shared-folder",
-      "description": "See what other sessions in the same folder are doing (/compartida)."
+      "description": "See what other sessions in the same folder are doing (/shared)."
     }
   ]
 }

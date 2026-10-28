@@ -2,10 +2,10 @@ import { expect, test } from 'claude-code/testing'
 
 import { cleanReply, enhanceAsk } from './ask'
 
-test('arma el pedido y limpia la respuesta', async () => {
-  const ask = enhanceAsk('agregá un login')
+test('builds the ask and cleans the reply', async () => {
+  const ask = enhanceAsk('add a login')
   expect(ask).toContain('Before writing any code, confirm with me:')
-  expect(ask.endsWith('agregá un login')).toBe(true)
-  expect(cleanReply('```markdown\nHacé el login.\n```')).toBe('Hacé el login.')
-  expect(cleanReply('  Hacé el login.  ')).toBe('Hacé el login.')
+  expect(ask.endsWith('add a login')).toBe(true)
+  expect(cleanReply('```markdown\nBuild the login.\n```')).toBe('Build the login.')
+  expect(cleanReply('  Build the login.  ')).toBe('Build the login.')
 })

@@ -13,5 +13,5 @@ export const pending = (list: Assumption[]): Assumption[] => list.filter(a => a.
 
 // What Claude reads when one is marked wrong.
 export const correction = (a: Assumption): string =>
-  `Corrección de un supuesto (#${a.n}${a.topic ? ', ' + a.topic : ''}): asumiste "${a.text}", y es incorrecto. ` +
-  `Lo correcto: ${a.fix}. Corregí solo esa parte y mantené lo demás.`
+  `Assumption correction (#${a.n}${a.topic ? ', ' + a.topic : ''}): you assumed "${a.text}", and that is wrong. ` +
+  `It should be: ${a.fix}. Fix only that part and keep the rest.`

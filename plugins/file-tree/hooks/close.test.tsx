@@ -7,7 +7,7 @@ const PANE = {
   props: { title: 'Files', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
 } as const
 
-test('cerrar y achicar solo en la terminal', async ($, on) => {
+test('close and shrink only in the terminal', async ($, on) => {
   on('clock.now', () => ({ value: 0 }))
   on('env.get', () => ({ value: undefined }))
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
