@@ -94,8 +94,8 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="column" borderStyle="round" paddingX={1}>
-          <Box flexDirection="row" gap={1}>
+        <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
             <Text bold>👥 También trabajando en esta carpeta</Text>
             <Text dimColor>· /compartida para el detalle</Text>
             <Box flexGrow={1} />

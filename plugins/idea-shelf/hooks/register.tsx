@@ -63,8 +63,8 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-      <Box flexDirection="column" borderStyle="round" paddingX={1}>
-        <Box flexDirection="row">
+      <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
+        <Box flexDirection="row" marginBottom={1}>
           <Text bold>{'+ : '}</Text>
           <Box flexGrow={1}>
             <Input
@@ -79,7 +79,7 @@ export const register: Register = on => {
         </Box>
         {ideas.length === 0 ? <Text dimColor>Estante vacío. Agregá con /idea texto.</Text> : null}
         {ideas.map(idea => (
-          <Box key={idea.id} flexDirection="row" gap={1}>
+          <Box key={idea.id} flexDirection="row" flexWrap="wrap" gap={1}>
             <Button key={`enviar-${idea.id}`} label="Enviar" onPress={() => void send($, idea)} />
             <Button key={`borrar-${idea.id}`} label="×" onPress={() => void save($, removeIdea(ideas, idea.id))} />
             <Text>{idea.text}</Text>

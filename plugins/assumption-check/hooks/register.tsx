@@ -67,7 +67,7 @@ export const register: Register = on => {
     const { Box, Text, Button, Input } = $.ui.resolve(e)
     const toggle = () => void update($, review, r => ({ ...r, isOpen: !r.isOpen }))
     const header = (
-      <Box flexDirection="row" gap={1}>
+      <Box flexDirection="row" flexWrap="wrap" gap={1} marginBottom={1}>
         <Text color={todo.length ? 'yellow' : 'green'}>{todo.length ? '◆' : '✓'}</Text>
         <Text>{todo.length ? `${todo.length} supuestos para revisar (${list.length} en total)` : `Todos revisados (${list.length})`}</Text>
         <Button key="abrir" plain dimColor label={isOpen ? '[-] cerrar' : 'abrir'} onPress={toggle} />
@@ -87,10 +87,10 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="column" borderStyle="round" paddingX={1}>
+        <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
           <Text bold color="yellow">{`? #${a.n} ${a.text}`}</Text>
           {a.topic ? <Text dimColor>{a.topic}</Text> : null}
-          <Box flexDirection="row" gap={1}>
+          <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
             <Button
               key={`bien-${a.n}`}
               label="✓ Bien"
@@ -99,14 +99,16 @@ export const register: Register = on => {
             <Button key={`mal-${a.n}`} label="✗ Mal" onPress={() => void update($, review, r => ({ ...r, editing: a.n, draft: '' }))} />
           </Box>
           {editing === a.n ? (
-            <Input
-              key={`fix-${a.n}`}
-              placeholder="¿Cómo debería ser?"
-              submitLabel="enviar"
-              value={draft}
-              onInput={(v: string) => void update($, review, r => ({ ...r, draft: v }))}
-              onSubmit={(v: string) => void markWrong($, a, v)}
-            />
+            <Box marginTop={1}>
+              <Input
+                key={`fix-${a.n}`}
+                placeholder="¿Cómo debería ser?"
+                submitLabel="enviar"
+                value={draft}
+                onInput={(v: string) => void update($, review, r => ({ ...r, draft: v }))}
+                onSubmit={(v: string) => void markWrong($, a, v)}
+              />
+            </Box>
           ) : null}
         </Box>
         {header}

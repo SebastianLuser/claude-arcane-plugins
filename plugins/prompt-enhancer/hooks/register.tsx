@@ -73,7 +73,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1}>
+        <Box flexDirection="row" flexWrap="wrap" gap={1} marginBottom={1}>
           <Text bold>Mejorar prompt</Text>
           <Button key="mejorar" label={isWorking ? 'Mejorando…' : 'Mejorar'} onPress={() => void (isWorking ? undefined : enhance($))} />
           <Button key="enviar" label="Enviar" onPress={() => void send($)} />
