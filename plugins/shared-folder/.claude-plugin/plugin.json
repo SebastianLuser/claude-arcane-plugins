@@ -1,6 +1,6 @@
 {
   "name": "shared-folder",
   "version": "0.1.0",
-  "description": "Si otra sesión de Claude trabaja en la misma carpeta, arriba del cuadro de texto ves qué pidió, si está trabajando y qué está haciendo, para que no se pisen. /compartida para el detalle.",
+  "description": "When another Claude session works in the same folder, the band above the prompt box shows what it asked for, whether it is working and what it is doing, so they do not step on each other (/compartida).",
   "types": "./types/index.d.ts"
 }

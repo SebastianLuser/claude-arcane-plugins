@@ -1,16 +1,16 @@
 {
   "name": "agents-panel",
   "version": "1.2.1-es.1",
-  "description": "Copia de savvy-progress (johnnyvizz, MIT) en español: panel de agentes (/agents-info) con modelo, en qué trabaja cada uno y tiempo, sin costo ni tokens.",
+  "description": "Agents panel (/agents-info): running, finished and planned subagents with model, what each is working on and time. Spanish UI, no cost or token counts. Based on savvy-progress by johnnyvizz (MIT).",
   "author": {
-    "name": "sebas (basado en johnnyvizz)"
+    "name": "sebas (based on johnnyvizz)"
   },
   "types": "./types/index.d.ts",
   "userConfig": {
     "language": {
       "type": "string",
       "title": "Panel language",
-      "description": "auto sigue el idioma de Claude Code y después el del sistema; es, en, ru o he",
+      "description": "auto follows Claude Code's language setting, then the system locale; es, en, ru or he (Hebrew, drawn right to left)",
       "default": "es",
       "options": [
         "auto",

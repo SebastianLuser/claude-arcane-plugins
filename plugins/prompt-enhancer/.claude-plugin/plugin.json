@@ -1,6 +1,6 @@
 {
   "name": "prompt-enhancer",
   "version": "0.1.0",
-  "description": "Arriba del cuadro de texto: Mejorar reescribe tu pedido usando las instrucciones y skills del proyecto (qué skill usar, qué confirmar antes, cómo se ve terminado); Enviar lo manda.",
+  "description": "Above the prompt box: Enhance rewrites your prompt using the project instructions and installed skills (which skill to use, what to confirm first, what done looks like); Send sends it (/mejorar).",
   "types": "./types/index.d.ts"
 }
