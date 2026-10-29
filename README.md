@@ -1,5 +1,7 @@
 # claude-arcane-plugins
 
+[![Validate and test the mods](https://github.com/SebastianLuser/claude-arcane-plugins/actions/workflows/test.yml/badge.svg)](https://github.com/SebastianLuser/claude-arcane-plugins/actions/workflows/test.yml)
+
 Personal Claude Code mods. They work in the terminal and in the desktop app (Code tab), on Claude Code 2.1.306 or newer.
 
 | Plugin | What it does | Command |

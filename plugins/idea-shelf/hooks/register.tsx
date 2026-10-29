@@ -77,7 +77,7 @@ export const register: Register = on => {
             />
           </Box>
         </Box>
-        {ideas.length === 0 ? <Text dimColor>Shelf empty. Add with /idea <text>.</Text> : null}
+        {ideas.length === 0 ? <Text dimColor>{'Shelf empty. Add with /idea <text>.'}</Text> : null}
         {ideas.map(idea => (
           <Box key={idea.id} flexDirection="row" flexWrap="wrap" gap={1}>
             <Button key={`send-${idea.id}`} label="Send" onPress={() => void send($, idea)} />

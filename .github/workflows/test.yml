@@ -1,0 +1,28 @@
+name: Validate and test the mods
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Pinned so a new Claude Code release can't turn the build red on its own.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.312
+      - name: Validate the marketplace
+        run: claude plugin validate .
+      - name: Validate and test each mod
+        run: |
+          set -e
+          for mod in plugins/*/; do
+            echo "::group::$mod"
+            claude plugin validate "$mod"
+            claude plugin test "$mod"
+            echo "::endgroup::"
+          done
