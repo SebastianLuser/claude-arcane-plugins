@@ -38,6 +38,21 @@
       "name": "shared-folder",
       "source": "./plugins/shared-folder",
       "description": "See what other sessions in the same folder are doing (/shared)."
+    },
+    {
+      "name": "service-impact",
+      "source": "./plugins/service-impact",
+      "description": "Which other services an edit to a migration, contract, handler or config affects (/impact)."
+    },
+    {
+      "name": "deploy-runbook",
+      "source": "./plugins/deploy-runbook",
+      "description": "Deploy runbook for the current branch: migrations, new env vars and table changes (/deploy-info)."
+    },
+    {
+      "name": "flow-graph",
+      "source": "./plugins/flow-graph",
+      "description": "Live graph of workflows and loops: agents, skills and MCP per workflow, and the current stage of a /loop (/flow)."
     }
   ]
 }

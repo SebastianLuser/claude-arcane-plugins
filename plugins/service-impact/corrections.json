@@ -1,0 +1,15 @@
+{
+  "ignore": [],
+  "tokens": {
+    "KIOSK": "kiosk-ai-webapp"
+  },
+  "vars": {
+    "store-fe": {
+      "API_BASE_URL": "store-be"
+    }
+  },
+  "external": {
+    "MAILER": "mailer",
+    "LEDGER": "ledger"
+  }
+}

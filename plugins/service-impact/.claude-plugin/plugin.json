@@ -1,0 +1,15 @@
+{
+  "name": "service-impact",
+  "version": "0.1.0",
+  "description": "Shows which other services are affected when you edit a migration, a contract, a handler or config.",
+  "author": { "name": "sebas" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "reposRoot": {
+      "type": "string",
+      "title": "Repos folder",
+      "description": "Folder that holds your repos. Empty: worked out from the session folder.",
+      "default": ""
+    }
+  }
+}
