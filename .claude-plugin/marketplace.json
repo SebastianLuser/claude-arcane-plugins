@@ -40,19 +40,19 @@
       "description": "See what other sessions in the same folder are doing (/shared)."
     },
     {
-      "name": "educabot-impacto",
-      "source": "./plugins/educabot-impacto",
-      "description": "Which other Educabot services an edit to a migration, contract, handler or config affects (/impacto)."
+      "name": "service-impact",
+      "source": "./plugins/service-impact",
+      "description": "Which other services an edit to a migration, contract, handler or config affects (/impact)."
     },
     {
-      "name": "educabot-deploy",
-      "source": "./plugins/educabot-deploy",
+      "name": "deploy-runbook",
+      "source": "./plugins/deploy-runbook",
       "description": "Deploy runbook for the current branch: migrations, new env vars and table changes (/deploy-info)."
     },
     {
-      "name": "educabot-flujos",
-      "source": "./plugins/educabot-flujos",
-      "description": "Live graph of workflows and loops: agents, skills and MCP per workflow, and the current stage of a /loop (/flujo)."
+      "name": "flow-graph",
+      "source": "./plugins/flow-graph",
+      "description": "Live graph of workflows and loops: agents, skills and MCP per workflow, and the current stage of a /loop (/flow)."
     }
   ]
 }

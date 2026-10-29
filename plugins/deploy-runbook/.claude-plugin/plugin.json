@@ -1,0 +1,7 @@
+{
+  "name": "deploy-runbook",
+  "version": "0.1.0",
+  "description": "When you open or review a PR, shows how the repo runs its migrations, which new variables to load and what changes in each table.",
+  "author": { "name": "sebas" },
+  "types": "./types/index.d.ts"
+}
