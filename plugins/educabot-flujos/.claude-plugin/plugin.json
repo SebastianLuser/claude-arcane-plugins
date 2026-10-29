@@ -1,0 +1,7 @@
+{
+  "name": "educabot-flujos",
+  "version": "0.1.0",
+  "description": "Grafo en vivo de workflows y loops: qué agentes corre cada workflow, qué skills y MCP llaman, y en qué etapa está el loop.",
+  "author": { "name": "Educabot" },
+  "types": "./types/index.d.ts"
+}

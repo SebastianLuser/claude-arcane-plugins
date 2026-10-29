@@ -14,6 +14,7 @@ Personal Claude Code mods. They work in the terminal and in the desktop app (Cod
 | `shared-folder` | Shows what other sessions open in the same folder are doing. | `/shared` |
 | `educabot-impacto` | Map of which other Educabot services are affected when you edit a migration, a contract, a handler or config. Band while editing, pane on demand. | `/impacto` |
 | `educabot-deploy` | Deploy runbook for the current branch, opened by `/create-pr` or `/code-review`: how the repo applies migrations, which new env vars to load and where, and what each migration changes in its tables. | `/deploy-info` |
+| `educabot-flujos` | Live graph in a desktop pane: each workflow with its agents colored by status and the skills and MCP servers they call, and each `/loop` as a circle of four stages with a marker on the current one. | `/flujo` |
 
 ## Install
 

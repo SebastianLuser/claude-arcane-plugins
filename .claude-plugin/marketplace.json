@@ -48,6 +48,11 @@
       "name": "educabot-deploy",
       "source": "./plugins/educabot-deploy",
       "description": "Deploy runbook for the current branch: migrations, new env vars and table changes (/deploy-info)."
+    },
+    {
+      "name": "educabot-flujos",
+      "source": "./plugins/educabot-flujos",
+      "description": "Live graph of workflows and loops: agents, skills and MCP per workflow, and the current stage of a /loop (/flujo)."
     }
   ]
 }
