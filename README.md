@@ -12,6 +12,8 @@ Personal Claude Code mods. They work in the terminal and in the desktop app (Cod
 | `assumption-check` | Claude logs the assumptions it makes; you mark each right or wrong, and wrong ones go back to Claude with your correction. | `/assumptions` |
 | `prompt-enhancer` | Turns a rough prompt into a complete one before sending: skills to use, what to confirm first, scope and what done looks like. | `/enhance` |
 | `shared-folder` | Shows what other sessions open in the same folder are doing. | `/shared` |
+| `educabot-impacto` | Map of which other Educabot services are affected when you edit a migration, a contract, a handler or config. Band while editing, pane on demand. | `/impacto` |
+| `educabot-deploy` | Deploy runbook for the current branch, opened by `/create-pr` or `/code-review`: how the repo applies migrations, which new env vars to load and where, and what each migration changes in its tables. | `/deploy-info` |
 
 ## Install
 

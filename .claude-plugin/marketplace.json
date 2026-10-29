@@ -38,6 +38,16 @@
       "name": "shared-folder",
       "source": "./plugins/shared-folder",
       "description": "See what other sessions in the same folder are doing (/shared)."
+    },
+    {
+      "name": "educabot-impacto",
+      "source": "./plugins/educabot-impacto",
+      "description": "Which other Educabot services an edit to a migration, contract, handler or config affects (/impacto)."
+    },
+    {
+      "name": "educabot-deploy",
+      "source": "./plugins/educabot-deploy",
+      "description": "Deploy runbook for the current branch: migrations, new env vars and table changes (/deploy-info)."
     }
   ]
 }

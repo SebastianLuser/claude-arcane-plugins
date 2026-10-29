@@ -1,0 +1,7 @@
+{
+  "name": "educabot-deploy",
+  "version": "0.1.0",
+  "description": "Al abrir o revisar un PR muestra cómo se migra el repo, qué variables nuevas hay que cargar y qué cambia en cada tabla.",
+  "author": { "name": "Educabot" },
+  "types": "./types/index.d.ts"
+}
