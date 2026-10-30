@@ -1,6 +1,6 @@
 {
   "name": "prompt-enhancer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Above the prompt box: Enhance rewrites your prompt using the project instructions and installed skills (which skill to use, what to confirm first, what done looks like); Send sends it (/enhance).",
   "types": "./types/index.d.ts"
 }

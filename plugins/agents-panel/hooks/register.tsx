@@ -705,7 +705,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const barW = textW
   const progress = progressOf(a)
   const stats = fmtTime(elapsed(a, at))
-  const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : ''
+  const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : nowDoing(a)
   const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
@@ -769,6 +769,16 @@ const ctxBar = (pct: number, width: number): string => {
 }
 
 const STATUS_GLYPH: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
+
+// One line for a tool call: the tool and its most telling argument.
+const doingOf = (tool: string, args: Record<string, unknown>): string => {
+  const file = args.file_path ?? args.notebook_path ?? args.path
+  const arg = typeof file === 'string' ? file.split(/[\\/]/).pop() : (args.description ?? args.command ?? args.pattern ?? args.url ?? args.skill ?? args.query)
+  const name = tool.replace(/^mcp__/, '')
+  return typeof arg === 'string' && arg.trim() ? `${name} · ${arg.trim().split('\n')[0].slice(0, 80)}` : name
+}
+
+const nowDoing = (a: AgentRun): string => (a.status === 'running' && a.doing) || ''
 
 // Opens the agents pane, or closes it when it is up; true when it ends up open.
 async function togglePane($: EngineInterface): Promise<boolean> {
@@ -906,6 +916,16 @@ export const register: Register = (on, options) => {
     return { result: matched ? 'ok' : `ignored: no panel row for agent ${agentId}` }
   })
 
+  // What each subagent is doing right now: its latest tool call.
+  on('tool.call', async ($, e, next) => {
+    const agentId = e.agentId
+    if (agentId && e.tool !== STEP_TOOL) {
+      const doing = doingOf(e.tool, e as unknown as Record<string, unknown>)
+      await update($, agents, list => list.map(a => (a.agentId === agentId ? { ...a, doing } : a)))
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // Safety net: worker launches move the faint layer even if the orchestrator forgets to report.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const type = String(e.subagent_type ?? '')
@@ -948,12 +968,8 @@ export const register: Register = (on, options) => {
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })
     await update($, now, () => at)
-    if (e.subagentType.startsWith('savvy-')) {
-      const f = await read($, flow)
-      await autoOpen($, f && !f.isFinished ? f.title : 'savvy-flow')
-    } else if (options.autoOpen === 'any') {
-      await autoOpen($, 'any-agent')
-    }
+    // Every new subagent brings the panel up, even after it was closed.
+    if (e.subagentType.startsWith('savvy-') || options.autoOpen === 'any') void $.ui.open({ id: PANE, title: tr().pane })
     return started
   })
 
@@ -1122,7 +1138,7 @@ export const register: Register = (on, options) => {
       const ctx = ctxOf(a)
       const progress = progressOf(a)
       const model = runModel(a)
-      const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''} · ` : ''
+      const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''} · ` : nowDoing(a) ? `${nowDoing(a)} · ` : ''
       return (
         <Box key={a.id} flexDirection="column" marginBottom={1}>
           <Box flexDirection="row" gap={1}>

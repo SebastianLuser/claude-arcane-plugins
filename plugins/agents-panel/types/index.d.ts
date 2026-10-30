@@ -38,6 +38,8 @@ export type AgentRun = {
   stepDone?: number
   stepTotal?: number
   stepNote?: string
+  /** The agent's latest tool call, e.g. "Read · register.tsx". */
+  doing?: string
 }
 
 export type Panel = {

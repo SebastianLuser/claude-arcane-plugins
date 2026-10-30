@@ -1,6 +1,6 @@
 {
   "name": "idea-shelf",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Per-project idea shelf above the prompt box: /idea opens it to jot ideas down without interrupting Claude, and each idea is sent later with a button.",
   "author": {
     "name": "sebas"

@@ -1,6 +1,6 @@
 {
   "name": "file-tree",
-  "version": "0.5.2-es.1",
+  "version": "0.5.3",
   "description": "File tree with colored icons by file type that highlights what Claude reads and edits (/tree). In the terminal it stays closed until asked and can close or shrink. Based on filetree by Kurt Buhler (MIT).",
   "types": "./types/index.d.ts",
   "author": {

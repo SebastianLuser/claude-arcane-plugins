@@ -1,6 +1,6 @@
 {
   "name": "assumption-check",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude logs each assumption it makes while working; above the prompt box you mark them right or wrong, and wrong ones go back to Claude with your correction (/assumptions).",
   "author": {
     "name": "sebas"
