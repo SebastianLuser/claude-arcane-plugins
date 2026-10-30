@@ -131,11 +131,12 @@ function impact(args: string) {
   }
 }
 
-test('should show a red band naming the DB users when a shared-DB migration is edited', OPTIONS, async ($, on) => {
-  standInEngine(on)
+test('should show a red band naming the DB users and open the map when a shared-DB migration is edited', OPTIONS, async ($, on) => {
+  const opened = standInEngine(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
 
   await $.tool.call(edit('shop-orders/db/migrations/0042_add_col.up.sql'))
+  expect(opened).toEqual(['Impact · shop-orders'])
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...BAND, surface })
@@ -220,7 +221,8 @@ test('should open the map from the band when Ver mapa is pressed', OPTIONS, asyn
 
   await band.press({ key: 'map' })
 
-  expect(opened).toEqual(['Impact · shop-orders'])
+  // Once by itself on the edit, once from the button.
+  expect(opened).toEqual(['Impact · shop-orders', 'Impact · shop-orders'])
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ type: 'Text', text: /ai-report-generator/ }))?.text).toContain('ai-report-generator')
   await pane.unmount()

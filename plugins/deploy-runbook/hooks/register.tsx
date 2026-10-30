@@ -137,6 +137,19 @@ async function openPane($: EngineInterface, report: Report | null): Promise<void
   await $.ui.open({ id: PANE, title: report ? `Deploy · ${report.repo}` : 'Deploy' })
 }
 
+const SHIP_COMMAND = /\b(git\s+push|gh\s+pr\s+create)\b/
+let shownKey = ''
+
+// Opens the runbook by itself when the branch has something to deploy that was not shown yet.
+async function autoOpen($: EngineInterface, isShipping: boolean): Promise<void> {
+  const report = await refresh($)
+  if (!report || !hasWork(report)) return
+  const key = `${report.branch}|${report.migrations.length}|${report.vars.length}`
+  if (key === shownKey && !isShipping) return
+  shownKey = key
+  await openPane($, report)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     corrections = await loadCorrections($)
@@ -150,6 +163,23 @@ export const register: Register = on => {
     if (report && hasWork(report)) await openPane($, report).catch(() => undefined)
     return prompt
   })
+
+  for (const tool of ['Edit', 'Write'] as const) {
+    on('tool.call', { tool }, async ($, e, next) => {
+      const ran = await next(e)
+      const path = e.file_path.replace(/\\/g, '/')
+      if (ran.deny === undefined && ran.isError !== true && (isMigration(path) || /(^|\/)\.env\.example$/i.test(path))) {
+        await autoOpen($, false).catch(() => undefined)
+      }
+      return ran
+    }).catch(($, e, next) => next(e))
+  }
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny === undefined && ran.isError !== true && SHIP_COMMAND.test(e.command)) await autoOpen($, true).catch(() => undefined)
+    return ran
+  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'deploy-info' }, async $ => {
     const report = await refresh($)

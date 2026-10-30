@@ -197,3 +197,36 @@ test('should never read nor diff a real .env when the branch changes one', async
   expect(await ui.find({ type: 'Text', text: /secret-host/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('should open the runbook by itself when a migration is edited, and not again for the same changes', async ($, on) => {
+  const calls = standInEngine(on, SLUG_BRANCH)
+  on('tool.call', () => ({ result: {} }))
+  await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
+
+  const edit = { tool: 'Edit', file_path: `${REPO}\\packages\\dbconn\\migrations\\000030_add_slug.up.sql`, old_string: 'a', new_string: 'b' } as const
+  await $.tool.call(edit)
+  await $.tool.call(edit)
+  await $.tool.call({ tool: 'Edit', file_path: `${REPO}/src/app/app.go`, old_string: 'a', new_string: 'b' })
+
+  expect(calls.opened).toEqual(['Deploy · billing-api'])
+})
+
+test('should open the runbook by itself on git push when the branch has something to deploy', async ($, on) => {
+  const calls = standInEngine(on, SLUG_BRANCH)
+  on('tool.call', () => ({ result: {} }))
+  await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
+
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+  expect(calls.opened).toEqual([])
+  await $.tool.call({ tool: 'Bash', command: 'git push -u origin feat/slug' })
+  expect(calls.opened).toEqual(['Deploy · billing-api'])
+})
+
+test('should not open the runbook on git push when the branch has nothing to deploy', async ($, on) => {
+  const calls = standInEngine(on, QUIET_BRANCH)
+  on('tool.call', () => ({ result: {} }))
+  await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
+
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(calls.opened).toEqual([])
+})

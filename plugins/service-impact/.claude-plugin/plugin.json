@@ -1,6 +1,6 @@
 {
   "name": "service-impact",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shows which other services are affected when you edit a migration, a contract, a handler or config.",
   "author": { "name": "sebas" },
   "types": "./types/index.d.ts",

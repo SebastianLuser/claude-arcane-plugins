@@ -113,6 +113,7 @@ async function noteEdit($: EngineInterface, file: string): Promise<void> {
   if (!found) return
   await update($, seenAtom, list => [...list, key])
   await update($, alertAtom, () => found)
+  await openPane($, where.repo)
 }
 
 async function openPane($: EngineInterface, repo: string | null): Promise<void> {
