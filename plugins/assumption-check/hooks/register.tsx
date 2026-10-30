@@ -61,7 +61,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const { list, isOpen, editing, draft } = await read($, review)
+    const { list, isOpen, editing } = await read($, review)
     if (list.length === 0) return next(e)
     const todo = pending(list)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
@@ -90,26 +90,24 @@ export const register: Register = on => {
         <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
           <Text bold color="yellow">{`? #${a.n} ${a.text}`}</Text>
           {a.topic ? <Text dimColor>{a.topic}</Text> : null}
-          <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
-            <Button
-              key={`right-${a.n}`}
-              label="✓ Right"
-              onPress={() => void update($, review, r => ({ ...r, list: setVerdict(r.list, a.n, 'right'), editing: 0, draft: '' }))}
-            />
-            <Button key={`wrong-${a.n}`} label="✗ Wrong" onPress={() => void update($, review, r => ({ ...r, editing: a.n, draft: '' }))} />
-          </Box>
           {editing === a.n ? (
-            <Box marginTop={1}>
-              <Input
-                key={`fix-${a.n}`}
-                placeholder="What should it be instead?"
-                submitLabel="send"
-                value={draft}
-                onInput={(v: string) => void update($, review, r => ({ ...r, draft: v }))}
-                onSubmit={(v: string) => void markWrong($, a, v)}
-              />
+            // The field keeps the typing itself: redrawing it with a stored draft on every key overwrote what was typed.
+            <Box flexDirection="row" gap={1} marginTop={1}>
+              <Box flexGrow={1}>
+                <Input key={`fix-${a.n}`} placeholder="What should it be instead?" submitLabel="send" autoFocus onSubmit={(v: string) => void markWrong($, a, v)} />
+              </Box>
+              <Button key={`cancel-${a.n}`} plain dimColor label="cancel" onPress={() => void update($, review, r => ({ ...r, editing: 0, draft: '' }))} />
             </Box>
-          ) : null}
+          ) : (
+            <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
+              <Button
+                key={`right-${a.n}`}
+                label="✓ Right"
+                onPress={() => void update($, review, r => ({ ...r, list: setVerdict(r.list, a.n, 'right'), editing: 0, draft: '' }))}
+              />
+              <Button key={`wrong-${a.n}`} label="✗ Wrong" onPress={() => void update($, review, r => ({ ...r, editing: a.n, draft: '' }))} />
+            </Box>
+          )}
         </Box>
         {header}
         {below}

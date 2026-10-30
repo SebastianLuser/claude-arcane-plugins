@@ -28,6 +28,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ text: /2 assumptions to review/ })).toBeTruthy()
     expect(await ui.find({ text: /#1 Categories are fixed/ })).toBeTruthy()
 
+    // While correcting, the field takes the buttons' row; cancel brings them back.
+    await ui.press({ key: 'wrong-1' })
+    expect(await ui.find({ key: 'right-1' })).toBeFalsy()
+    await ui.press({ key: 'cancel-1' })
+    expect(await ui.find({ key: 'fix-1' })).toBeFalsy()
+
     await ui.press({ key: 'wrong-1' })
     await ui.input({ key: 'fix-1', text: 'users can edit them' })
     expect(sent).toHaveLength(1)
