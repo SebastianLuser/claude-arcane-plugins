@@ -7,6 +7,8 @@ import {
   classifyTool,
   finishAgent,
   hasAgent,
+  isLive,
+  loopBegin,
   loopSchedule,
   loopStop,
   loopWait,
@@ -62,16 +64,28 @@ export const register: Register = on => {
       const cron = typeof args.cron === 'string' ? args.cron : null
       const delay = typeof args.delaySeconds === 'number' ? args.delaySeconds : null
       const nextAt = cron ? nextCron(cron, now) : delay === null ? null : now + delay * 1000
-      const isNew = (await read($, flowAtom)).loop === null
+      const isNew = !isLive((await read($, flowAtom)).loop)
       await change($, flow => loopSchedule(flow, nextAt, cron))
       if (isNew) await openPane($)
     }
     return ran
   }).catch(($, e, next) => next(e))
 
+  // `/loop` shows its first round as soon as it starts, before it schedules the next one.
+  on('skill.prompt', { skill: 'loop' }, async ($, e, next) => {
+    const prompt = await next(e)
+    const isNew = !isLive((await read($, flowAtom)).loop)
+    await change($, loopBegin)
+    if (isNew) await openPane($)
+    return prompt
+  }).catch(($, e, next) => next(e))
+
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined || !e.workflow) return started
+    const runId = e.workflow.runId
+    // A run launched without a Workflow call this session saw brings the pane up with its first agent.
+    const isFirst = !(await read($, flowAtom)).runs.some(r => (e.tool_use_id && r.id === e.tool_use_id) || (runId && r.runId === runId))
     const spawn = {
       toolUseId: e.tool_use_id,
       runId: e.workflow.runId,
@@ -81,6 +95,7 @@ export const register: Register = on => {
       at: await $.clock.now(),
     }
     await change($, flow => addAgent(flow, spawn))
+    if (isFirst) await openPane($)
     return started
   }).catch(($, e, next) => next(e))
 
@@ -120,6 +135,7 @@ export const register: Register = on => {
         <Box flexDirection="column">
           <Text bold color={VIOLET}>FLOWS</Text>
           <Text dimColor>No workflow or /loop has run in this session yet.</Text>
+          <Text dimColor>This pane opens by itself when a /loop starts or a workflow launches its first agent.</Text>
         </Box>
       )
     }
@@ -128,15 +144,17 @@ export const register: Register = on => {
       const { Svg } = ui
       const W = Math.max(320, Math.min(900, (e.props.bodyColumns || 60) * 8 - 8))
       const graph = run ? workflowSvg(W, run) : null
+      const now = await $.clock.now()
       return (
         <Box flexDirection="column" gap={1}>
           {flow.loop && (
             <Svg
               key="loop"
-              source={loopSvg(W, flow.loop)}
-              alt={`Loop, round ${flow.loop.round}, stage ${STAGE_LABEL[flow.loop.stage]}, ${nextText(flow.loop)}`}
+              source={loopSvg(W, flow.loop, now)}
+              alt={flow.loop.isStopped ? `Loop ended after ${flow.loop.round} rounds` : `Loop, round ${flow.loop.round}, stage ${STAGE_LABEL[flow.loop.stage]}, ${nextText(flow.loop)}`}
               width={W}
               height={LOOP_HEIGHT}
+              isInteractive
             />
           )}
           {run && graph && (
@@ -146,6 +164,7 @@ export const register: Register = on => {
               alt={`Workflow ${run.name}: ${run.agents.length} agents, ${STATUS_LABEL[runStatus(run)]}`}
               width={W}
               height={graph.height}
+              isInteractive
             />
           )}
           {older > 0 && <Text dimColor>{older} earlier workflows in this session</Text>}
@@ -158,7 +177,11 @@ export const register: Register = on => {
         {flow.loop && (
           <Box flexDirection="column">
             <Text bold color={VIOLET}>LOOP · round {flow.loop.round}</Text>
-            <Text>● {STAGE_LABEL[flow.loop.stage]} <Text dimColor>· {nextText(flow.loop)}</Text></Text>
+            {flow.loop.isStopped ? (
+              <Text dimColor>■ ended</Text>
+            ) : (
+              <Text>● {STAGE_LABEL[flow.loop.stage]} <Text dimColor>· {nextText(flow.loop)}</Text></Text>
+            )}
           </Box>
         )}
         {run && (

@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import { classify, impact, locate, otherEnd } from './classify'
 import type { Edge, EdgeKind, Graph, Trigger } from '../types'
 import { scanAll } from './scan'
+import { focusSvg, mapSvg } from './svg'
 import type { Corrections } from './scan'
 
 const PLUGIN = 'service-impact'
@@ -206,6 +207,38 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           <Text dimColor>Scanning the repos in {root || 'the folder'}...</Text>
           {rescanButton}
+        </Box>
+      )
+    }
+
+    const ui = $.ui.resolve(e)
+    if (e.surface === 'desktop' && 'Svg' in ui) {
+      const { Svg } = ui
+      const W = Math.max(320, Math.min(900, (e.props.bodyColumns || 60) * 8 - 8))
+      const alert = await read($, alertAtom)
+      const drawn = repo ? focusSvg(W, graph, repo, alert) : mapSvg(W, graph, alert)
+      const hubs = graph.repos
+        .map(name => ({ name, users: graph.edges.filter(edge => edge.to === name).length }))
+        .filter(row => row.users > 0 && row.name !== repo)
+        .sort((a, b) => b.users - a.users || a.name.localeCompare(b.name))
+        .slice(0, 12)
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Svg
+            key={repo ? `focus-${repo}` : 'map'}
+            source={drawn.source}
+            alt={repo ? `Impact map of ${repo}` : `Map of ${graph.repos.length} scanned repos`}
+            width={W}
+            height={drawn.height}
+            isInteractive
+          />
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {repo && <Button key="all" label="◂ All services" onPress={() => openPane($, null)} />}
+            {hubs.map(row => (
+              <Button key={`repo-${row.name}`} label={`${row.name} · ${row.users}`} onPress={() => openPane($, row.name)} />
+            ))}
+            {rescanButton}
+          </Box>
         </Box>
       )
     }

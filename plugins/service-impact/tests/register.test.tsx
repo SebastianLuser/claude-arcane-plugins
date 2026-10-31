@@ -194,14 +194,53 @@ test('should open the map with both directions colored when /impact names a repo
 
   expect(result.text).toBe('Impact map of shop-orders open.')
   expect(opened).toEqual(['Impact · shop-orders'])
-  for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /Used by/ }))?.text).toBe('Used by')
-    expect((await ui.find({ type: 'Text', text: /This service uses/ }))?.text).toBe('This service uses')
-    expect((await ui.find({ type: 'Text', text: /billing-api/ }))?.props.color).toBe('warning')
-    expect((await ui.find({ type: 'Text', text: /mailer/ }))?.props.color).toBe('subtle')
-    await ui.unmount()
-  }
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /Used by/ }))?.text).toBe('Used by')
+  expect((await ui.find({ type: 'Text', text: /This service uses/ }))?.text).toBe('This service uses')
+  expect((await ui.find({ type: 'Text', text: /billing-api/ }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: /mailer/ }))?.props.color).toBe('subtle')
+  await ui.unmount()
+
+  // The desktop draws it: users on the left, what it uses on the right, each edge in its kind's color.
+  const drawn = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const svg = await drawn.find({ type: 'Svg' })
+  expect(svg?.props.isInteractive).toBe(true)
+  const source = String(svg?.props.source)
+  expect(source).toContain('USED BY · 2')
+  expect(source).toContain('USES · 2')
+  expect(source).toContain('billing-api')
+  expect(source).toContain('stroke="#F5A524"')
+  expect(source).toContain('stroke-dasharray="4 3"')
+  await drawn.press({ key: 'all' })
+  expect(opened).toEqual(['Impact · shop-orders', 'Impact'])
+  await drawn.unmount()
+})
+
+test('should draw the edit as a red banner with glowing edges on the desktop map', OPTIONS, async ($, on) => {
+  standInEngine(on)
+  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+
+  await $.tool.call(edit('shop-orders/db/migrations/0042_add_col.up.sql'))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const source = String((await ui.find({ type: 'Svg' }))?.props.source)
+  expect(source).toContain('Migration edited · 1 service affected')
+  expect(source).toContain('class="hot"')
+  expect(source).toContain('animateMotion')
+  await ui.unmount()
+})
+
+test('should draw every connected repo on the overview map with a button to open each', OPTIONS, async ($, on) => {
+  const opened = standInEngine(on)
+  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+  await $.command.run(impact(''))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const source = String((await ui.find({ type: 'Svg' }))?.props.source)
+  expect(source).toContain('6 services · 5 connections')
+  await ui.press({ key: 'repo-shop-orders' })
+  expect(opened.at(-1)).toBe('Impact · shop-orders')
+  await ui.unmount()
 })
 
 test('should say the repo is unknown when /impact names one that was not scanned', OPTIONS, async ($, on) => {

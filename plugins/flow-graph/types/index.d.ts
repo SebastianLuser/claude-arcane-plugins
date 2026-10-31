@@ -32,6 +32,7 @@ export type Loop = {
   round: number
   nextAt: number | null
   cron: string | null
+  isStopped?: true
 }
 
 export type Flow = {

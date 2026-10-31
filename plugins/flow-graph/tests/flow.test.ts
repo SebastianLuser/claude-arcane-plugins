@@ -1,21 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  EMPTY,
-  addAgent,
-  classifyTool,
-  finishAgent,
-  loopSchedule,
-  loopStop,
-  loopWait,
-  loopWake,
-  loopWork,
-  nextCron,
-  noteTool,
-  runStatus,
-  startRun,
-  workflowName,
-} from '../hooks/flow'
+import { EMPTY, addAgent, classifyTool, finishAgent, loopBegin, loopSchedule, loopStop, loopWait, loopWake, loopWork, nextCron, noteTool, runStatus, startRun, workflowName } from '../hooks/flow'
 
 function spawn(index: number, agentId: string, toolUseId = 'toolu_wf') {
   return { toolUseId, runId: 'wf_1', index, agentId, name: `review ${index}`, at: 2 }
@@ -167,7 +152,16 @@ describe('loop stages', () => {
     expect(loopWake(EMPTY)).toBe(EMPTY)
   })
 
-  test('should clear the loop when it stops', () => {
-    expect(loopStop(loopSchedule(EMPTY, 1)).loop).toBeNull()
+  test('should keep a stopped loop with its rounds and start over when a new one is scheduled', () => {
+    const stopped = loopStop(loopWake(loopSchedule(EMPTY, 1)))
+    expect(stopped.loop).toEqual({ stage: 'wake', round: 2, nextAt: null, cron: null, isStopped: true })
+    expect(loopWake(stopped)).toBe(stopped)
+    expect(loopSchedule(stopped, 5).loop).toEqual({ stage: 'schedule', round: 1, nextAt: 5, cron: null })
+  })
+
+  test('should show round 1 working as soon as /loop starts, and leave a running loop alone', () => {
+    expect(loopBegin(EMPTY).loop).toEqual({ stage: 'work', round: 1, nextAt: null, cron: null })
+    const running = loopWake(loopSchedule(EMPTY, 1))
+    expect(loopBegin(running)).toBe(running)
   })
 })

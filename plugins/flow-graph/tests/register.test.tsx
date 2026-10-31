@@ -32,6 +32,7 @@ function standInEngine(on: On, now = 0): string[] {
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('skill.prompt', (_, e) => ({ text: e.text }))
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
@@ -129,7 +130,36 @@ test('should move the loop marker through its four stages and count rounds', asy
   expect(await stageNow()).toContain('current stage: work')
 
   await $.tool.call({ tool: 'ScheduleWakeup', stop: true } as never)
-  expect(await stageNow()).not.toContain('current stage')
+  const ended = await stageNow()
+  expect(ended).not.toContain('current stage')
+  expect(ended).toContain('after 2 rounds')
+})
+
+test('should open the pane on round 1 as soon as /loop starts', async ($, on) => {
+  const opened = standInEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  await $.skill.prompt({ skill: 'loop', text: 'Run the loop.' })
+
+  expect(opened).toEqual(['flow-graph'])
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const svg = await ui.find({ type: 'Svg' })
+  expect(svg?.props.isInteractive).toBe(true)
+  expect(String(svg?.props.source)).toContain('round 1')
+  expect(String(svg?.props.source)).toContain('current stage: work')
+  await ui.unmount()
+})
+
+test('should open the pane on the first agent of a workflow it never saw launched', async ($, on) => {
+  const opened = standInEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  for (const index of [1, 2]) await $.agent.spawn(spawn(index))
+
+  expect(opened).toEqual(['flow-graph'])
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('2. perf')
+  await ui.unmount()
 })
 
 test('should show the next time on every round of a fixed-interval loop', async ($, on) => {

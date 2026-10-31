@@ -90,21 +90,26 @@ export function runStatus(run: Run): Status {
 
 // A routine or scheduled task also fires a scheduled prompt: only a loop this session saw scheduled wakes.
 export function loopWake(flow: Flow): Flow {
-  return flow.loop ? setLoop(flow, { stage: 'wake', round: flow.loop.round + 1, nextAt: null }) : flow
+  return isLive(flow.loop) ? setLoop(flow, { stage: 'wake', round: flow.loop.round + 1, nextAt: null }) : flow
 }
 
 export function loopWork(flow: Flow): Flow {
-  return flow.loop?.stage === 'wake' ? setLoop(flow, { stage: 'work' }) : flow
+  return isLive(flow.loop) && flow.loop.stage === 'wake' ? setLoop(flow, { stage: 'work' }) : flow
+}
+
+// `/loop` starts working before it schedules anything: the pane shows round 1 at once.
+export function loopBegin(flow: Flow): Flow {
+  return isLive(flow.loop) ? flow : { ...flow, loop: { stage: 'work', round: 1, nextAt: null, cron: null } }
 }
 
 export function loopSchedule(flow: Flow, nextAt: number | null, cron: string | null = null): Flow {
-  const loop: Loop = flow.loop ?? { stage: 'schedule', round: 1, nextAt, cron }
+  const loop: Loop = isLive(flow.loop) ? flow.loop : { stage: 'schedule', round: 1, nextAt, cron }
   return { ...flow, loop: { ...loop, stage: 'schedule', nextAt, cron: cron ?? loop.cron } }
 }
 
 // A cron job re-arms itself when the turn ends, so its next time is worked out again each round.
 export function loopWait(flow: Flow, now: number): Flow {
-  if (!flow.loop) return flow
+  if (!isLive(flow.loop)) return flow
   const nextAt = flow.loop.cron ? nextCron(flow.loop.cron, now) : flow.loop.nextAt
   return setLoop(flow, { stage: 'wait', nextAt })
 }
@@ -135,8 +140,13 @@ export function nextCron(cron: string, now: number): number | null {
   return null
 }
 
+// A stopped loop stays drawn, greyed, with its last round, until another one starts.
 export function loopStop(flow: Flow): Flow {
-  return { ...flow, loop: null }
+  return flow.loop ? { ...flow, loop: { ...flow.loop, nextAt: null, isStopped: true } } : flow
+}
+
+export function isLive(loop: Loop | null): loop is Loop {
+  return !!loop && !loop.isStopped
 }
 
 function setLoop(flow: Flow, patch: Partial<Loop>): Flow {

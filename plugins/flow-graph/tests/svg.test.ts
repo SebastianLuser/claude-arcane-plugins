@@ -74,6 +74,21 @@ describe('loopSvg', () => {
     expect(loopSvg(400, { stage: 'work', round: 1, nextAt: null, cron: null })).toContain('next: —')
   })
 
+  test('should count down to the next round and say how long is left', () => {
+    const source = loopSvg(400, { stage: 'wait', round: 3, nextAt: 300_000, cron: null }, 60_000)
+    expect(source).toContain('dur="240s"')
+    expect(source).toContain('in 4 min')
+    expect(source.match(/<circle cx="[\d.]+" cy="306" r="4"/g)).toHaveLength(3)
+  })
+
+  test('should grey out a stopped loop and say how many rounds it ran', () => {
+    const source = loopSvg(400, { stage: 'work', round: 4, nextAt: null, cron: null, isStopped: true }, 1)
+    expect(source).toContain('loop ended')
+    expect(source).toContain('after 4 rounds')
+    expect(source).not.toContain('current stage')
+    expect(source).not.toContain('class="orbit"')
+  })
+
   test('should mark a cron time as approximate', () => {
     const at = new Date(2026, 9, 29, 14, 5).getTime()
     expect(loopSvg(400, { stage: 'wait', round: 1, nextAt: at, cron: '*/5 * * * *' })).toContain('next ~14:05')
