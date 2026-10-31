@@ -1,6 +1,6 @@
 {
   "name": "agents-panel",
-  "version": "1.3.0",
+  "version": "1.6.0",
   "description": "Agents panel (/agents-info): running, finished and planned subagents with model, what each is working on and time. No cost or token counts. Based on savvy-progress by johnnyvizz (MIT).",
   "author": {
     "name": "sebas (based on johnnyvizz)"

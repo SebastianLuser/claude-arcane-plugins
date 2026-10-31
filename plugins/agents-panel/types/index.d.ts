@@ -40,6 +40,8 @@ export type AgentRun = {
   stepNote?: string
   /** The agent's latest tool call, e.g. "Read · register.tsx". */
   doing?: string
+  /** The crab costume it was given when it started. */
+  costume?: string
 }
 
 export type Panel = {

@@ -560,6 +560,9 @@ const CRAB_CSS = `<style>
 @keyframes wave{50%{transform:skewY(-12deg) scaleX(.85)}}
 .c-explore.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
+.run .tw{animation:blink 1s steps(1) infinite}
+.c-mechanic.run .gr{transform-origin:50% 50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.c-rocketeer.run .rk{animation:float .5s ease-in-out infinite}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
 
@@ -607,10 +610,214 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
     f(7, 11, 11, 1, INK); f(18, 11, 4, 3, INK)
     f(27, 6, 1, 9, '#C9CCD2', 'it'); f(26, 15, 3, 1, '#7A4A26', 'it')
   },
+  // The rest take turns on plain subagents; `tw` pixels twinkle while they run.
+  wizard: f => {
+    crabBody(f)
+    stamp(f, 6, 1, ['........pp........', '.......ppp........', '......pppps.......', '......pppppp......', '.....ppsppppp.....', '.....pppppppp.....', '....pppppppspp....', '....pppppppppp....', 'bbbbbbbbbbbbbbbbbb'], { p: '#5B3FA8', s: '#F5C542', b: '#3E2A78' })
+    f(25, 8, 1, 6, '#7A4A26'); stamp(f, 24, 5, ['.y.', 'yyy', '.y.'], { y: '#F5C542' }, 'tw')
+  },
+  cowboy: f => {
+    crabBody(f)
+    stamp(f, 5, 4, ['......hhhhhhhh......', '.....hhhhhhhhhh.....', '.....hhhhhhhhhh.....', '.....bbbbbbbbbb.....', 'hhhhhhhhhhhhhhhhhhhh', '.hhhhhhhhhhhhhhhhhh.'], { h: '#9A6B3C', b: '#5A3519' })
+    f(9, 16, 12, 2, '#D0453F')
+  },
+  ninja: f => {
+    crabBody(f)
+    f(7, 10, 16, 2, INK); f(7, 14, 16, 2, INK); f(7, 12, 16, 2, '#F1E3D3'); f(9, 12, 2, 2, INK); f(19, 12, 2, 2, INK)
+    f(7, 10, 16, 1, '#D0453F'); f(3, 9, 4, 1, '#D0453F'); f(1, 10, 3, 1, '#D0453F')
+    f(25, 2, 1, 9, '#C9CCD2'); f(24, 11, 3, 1, INK); f(25, 12, 1, 2, INK)
+  },
+  viking: f => {
+    crabBody(f)
+    stamp(f, 7, 5, ['....gggggggg....', '..gggggggggggg..', '.gggggggggggggg.', 'gggggggggggggggg', 'dddddddddddddddd'], { g: '#9AA0A8', d: '#6B7078' })
+    stamp(f, 4, 2, ['w.....', 'w.....', 'ww....', '.ww...', '..www.', '...www'], { w: '#F4F3EE' })
+    stamp(f, 20, 2, ['.....w', '.....w', '....ww', '...ww.', '.www..', 'www...'], { w: '#F4F3EE' })
+    f(10, 17, 10, 4, '#C9772E')
+  },
+  king: f => {
+    crabBody(f)
+    stamp(f, 9, 4, ['r....yy....r', 'y...yyyy...y', 'yy.yyyyyy.yy', 'yyyyyyyyyyyy', 'yyyyryybyyyy', 'yyyyyyyyyyyy'], { y: '#F5C542', r: '#D0453F', b: '#378ADD' })
+    f(25, 4, 1, 10, '#C99A1E'); f(24, 2, 3, 2, '#D0453F', 'tw')
+  },
+  party: f => {
+    crabBody(f)
+    stamp(f, 12, 2, ['..pp..', '..bb..', '.pppp.', '.bbbb.', 'pppppp', 'bbbbbb', 'pppppp', 'bbbbbb'], { p: '#E8559A', b: '#4FC3E8' })
+    f(14, 0, 2, 2, '#F5C542', 'tw')
+    f(4, 4, 1, 1, '#F5C542', 'tw'); f(25, 6, 1, 1, '#7F77DD', 'tw'); f(23, 2, 1, 1, '#1D9E75', 'tw'); f(6, 8, 1, 1, '#D0453F', 'tw')
+  },
+  magician: f => {
+    crabBody(f)
+    stamp(f, 9, 1, ['..kkkkkkkk..', '..kkkkkkkk..', '..kkkkkkkk..', '..kkkkkkkk..', '..kkkkkkkk..', '..rrrrrrrr..', '..kkkkkkkk..', '..kkkkkkkk..', 'kkkkkkkkkkkk'], { k: '#2A2A2C', r: '#D0453F' })
+    f(24, 6, 1, 8, INK); f(24, 5, 1, 1, '#F8F6F1'); f(26, 4, 1, 1, '#F5C542', 'tw'); f(27, 6, 1, 1, '#F5C542', 'tw')
+    f(12, 18, 2, 2, '#D0453F'); f(16, 18, 2, 2, '#D0453F'); f(14, 18, 2, 2, '#9A2F2A')
+  },
+  witch: f => {
+    crabBody(f)
+    stamp(f, 6, 1, ['..........kkk.....', '.........kkk......', '........kkkk......', '.......kkkkk......', '.......kkkkkk.....', '......kkkkkkk.....', '......gggggggg....', 'kkkkkkkkkkkkkkkkkk', '.kkkkkkkkkkkkkkkk.'], { k: '#2E2A3A', g: '#8E5BD0' })
+    f(24, 6, 1, 10, '#7A4A26'); stamp(f, 23, 16, ['yyy', 'yyy', 'y.y'], { y: '#D9A441' })
+  },
+  graduate: f => {
+    crabBody(f)
+    f(5, 6, 20, 2, INK); f(9, 8, 12, 2, INK); f(22, 7, 1, 4, '#F5C542'); f(21, 11, 3, 1, '#F5C542', 'tw')
+    f(24, 8, 5, 2, '#F8F6F1'); f(26, 8, 1, 2, '#D0453F')
+  },
+  dj: f => {
+    crabBody(f)
+    f(8, 6, 14, 1, '#2A2A2C'); f(7, 7, 1, 3, '#2A2A2C'); f(22, 7, 1, 3, '#2A2A2C'); f(5, 10, 3, 5, '#E8559A'); f(22, 10, 3, 5, '#E8559A')
+    stamp(f, 25, 1, ['.kk', '.k.', '.k.', 'kk.'], { k: '#7F77DD' }, 'tw')
+    stamp(f, 1, 3, ['.kk', '.k.', 'kk.'], { k: '#1D9E75' }, 'tw')
+  },
+  farmer: f => {
+    crabBody(f)
+    stamp(f, 5, 5, ['......ssssssss......', '.....ssssssssss.....', '.....rrrrrrrrrr.....', 'ssssssssssssssssssss', '.ssssssssssssssssss.'], { s: '#E3C16F', r: '#D0453F' })
+    f(9, 17, 12, 5, '#3F6FB5'); f(9, 15, 2, 2, '#3F6FB5'); f(19, 15, 2, 2, '#3F6FB5')
+    f(26, 4, 1, 10, '#C99A1E'); stamp(f, 25, 2, ['.y.', 'yyy', '.y.'], { y: '#E3C16F' })
+  },
+  sailor: f => {
+    crabBody(f)
+    stamp(f, 8, 6, ['...wwwwwwww...', '.wwwwwwwwwwww.', 'nnnnnnnnnnnnnn', '..kkkkkkkkkk..'], { w: '#F8F6F1', n: '#24407A', k: INK })
+    f(7, 17, 16, 1, '#24407A'); f(7, 19, 16, 1, '#24407A'); f(7, 21, 16, 1, '#24407A')
+  },
+  firefighter: f => {
+    crabBody(f)
+    stamp(f, 6, 4, ['.....rrrrrrrr.....', '...rrrrrrrrrrrr...', '..rrrrrryyrrrrrr..', '..rrrrrryyrrrrrr..', '.rrrrrrrrrrrrrrrr.', 'rrrrrrrrrrrrrrrrrr'], { r: '#C8322B', y: '#F5C542' })
+    f(24, 10, 2, 6, '#3A3A3C'); f(26, 9, 2, 2, '#C9CCD2'); f(28, 7, 1, 1, '#7FC8F0', 'tw'); f(28, 5, 1, 1, '#7FC8F0', 'tw')
+  },
+  doctor: f => {
+    crabBody(f)
+    f(7, 8, 16, 1, '#C9CCD2'); stamp(f, 12, 4, ['.mmmm.', 'mmwwmm', 'mmwwmm', '.mmmm.'], { m: '#C9CCD2', w: '#F8F6F1' }); f(14, 5, 1, 1, '#fff', 'tw')
+    f(10, 16, 1, 4, '#3A3A3C'); f(19, 16, 1, 4, '#3A3A3C'); f(10, 20, 10, 1, '#3A3A3C'); f(14, 19, 3, 2, '#C9CCD2')
+  },
+  artist: f => {
+    crabBody(f)
+    stamp(f, 7, 7, ['....bbbbbbbb....', '.bbbbbbbbbbbbbb.', 'bbbbbbbbbbbbbbbb'], { b: '#B33A5B' }); f(15, 5, 1, 2, '#B33A5B')
+    f(25, 6, 1, 8, '#7A4A26'); f(25, 4, 1, 2, '#378ADD', 'tw')
+    stamp(f, 0, 15, ['.pppp', 'pprpp', 'ppppy', '.pbp.'], { p: '#D9B98A', r: '#D0453F', y: '#F5C542', b: '#378ADD' })
+  },
+  robot: f => {
+    crabBody(f)
+    f(14, 4, 2, 5, '#8E929A'); f(13, 2, 4, 2, '#D0453F', 'tw'); f(8, 9, 14, 1, '#8E929A')
+    f(7, 11, 16, 4, '#3A3A3C'); f(9, 12, 3, 2, '#4FE3C1'); f(18, 12, 3, 2, '#4FE3C1')
+    f(8, 18, 1, 1, '#8E929A'); f(21, 18, 1, 1, '#8E929A')
+  },
+  knight: f => {
+    crabBody(f)
+    stamp(f, 12, 0, ['..rr..', '.rrrr.', 'rrrrrr', '.rr...'], { r: '#D0453F' })
+    stamp(f, 7, 4, ['....ssssssss....', '..ssssssssssss..', '.ssssssssssssss.', 'ssssssssssssssss', 'ssssssssssssssss', 'ssssssssssssssss'], { s: '#A8AEB6' })
+    f(26, 1, 1, 11, '#E6E8EE'); f(24, 12, 5, 1, '#C99A1E'); f(26, 13, 1, 2, '#7A4A26')
+  },
+  clown: f => {
+    crabBody(f)
+    f(3, 8, 5, 5, '#E8559A'); f(22, 8, 5, 5, '#4FC3E8'); f(8, 7, 14, 3, '#F5C542')
+    f(12, 4, 6, 3, '#7F77DD'); f(11, 6, 8, 1, '#7F77DD'); f(14, 15, 2, 2, '#E0362C', 'tw')
+  },
+  scuba: f => {
+    crabBody(f)
+    f(7, 10, 16, 1, '#2A2A2C'); f(8, 11, 14, 4, '#4FC3E8'); f(7, 15, 16, 1, '#2A2A2C'); f(9, 12, 2, 2, INK); f(19, 12, 2, 2, INK)
+    f(23, 4, 2, 8, '#F59A23')
+    f(25, 1, 2, 2, 'rgba(169,214,245,.8)', 'tw'); f(27, 3, 1, 1, 'rgba(169,214,245,.8)', 'tw'); f(24, 0, 1, 1, 'rgba(169,214,245,.8)', 'tw')
+  },
+  santa: f => {
+    crabBody(f)
+    stamp(f, 7, 3, ['..........rrrw..', '.......rrrrrr.ww', '.....rrrrrrrr...', '...rrrrrrrrrr...', '.rrrrrrrrrrrrr..', 'wwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwww'], { r: '#C8322B', w: '#F8F6F1' })
+    f(9, 16, 12, 4, '#F8F6F1'); f(11, 20, 8, 1, '#F8F6F1')
+  },
+  beanie: f => {
+    crabBody(f)
+    stamp(f, 8, 4, ['.....pppp.....', '.....pppp.....', '..bbbbbbbbbb..', '.bbbbbbbbbbbb.', 'bbbbbbbbbbbbbb', 'cccccccccccccc'], { b: '#1D9E75', c: '#147A5A', p: '#F8F6F1' })
+    f(7, 16, 16, 2, '#D0453F'); f(19, 18, 3, 3, '#D0453F')
+  },
+  cat: f => {
+    crabBody(f)
+    stamp(f, 7, 6, ['kk............kk', 'kpk..........kpk', 'kppk........kppk', 'kkkkkkkkkkkkkkkk'], { k: '#2A2A2C', p: '#F2A5B8' })
+    f(3, 14, 4, 1, INK); f(3, 16, 4, 1, INK); f(14, 15, 2, 1, '#F2A5B8')
+  },
+  // Tech and engineering crew.
+  hacker: f => {
+    crabBody(f)
+    f(6, 8, 18, 3, '#2F3B45'); f(5, 10, 2, 10, '#2F3B45'); f(23, 10, 2, 10, '#2F3B45'); f(12, 16, 1, 3, '#C9CCD2'); f(17, 16, 1, 3, '#C9CCD2')
+    f(1, 2, 1, 2, '#3BE07A', 'tw'); f(3, 5, 1, 1, '#3BE07A', 'tw'); f(26, 1, 1, 2, '#3BE07A', 'tw'); f(28, 4, 1, 1, '#3BE07A', 'tw'); f(25, 6, 1, 2, '#3BE07A', 'tw')
+  },
+  scientist: f => {
+    crabBody(f, -4)
+    f(8, 5, 14, 2, '#E6E8EE'); f(9, 4, 1, 1, '#E6E8EE'); f(13, 4, 1, 1, '#E6E8EE'); f(17, 4, 1, 1, '#E6E8EE'); f(20, 4, 1, 1, '#E6E8EE')
+    f(7, 9, 16, 1, '#3A3A3C'); f(9, 7, 4, 3, '#7FC8F0'); f(17, 7, 4, 3, '#7FC8F0'); f(13, 8, 4, 1, '#3A3A3C')
+    stamp(f, 23, 5, ['.gg.', '.gg.', 'gllg', 'llll', 'llll'], { g: '#C9CCD2', l: '#4FE3C1' })
+    f(24, 3, 1, 1, '#4FE3C1', 'tw'); f(26, 1, 1, 1, '#4FE3C1', 'tw')
+  },
+  coder: f => {
+    crabBody(f)
+    f(8, 11, 4, 1, INK); f(8, 14, 4, 1, INK); f(8, 11, 1, 4, INK); f(11, 11, 1, 4, INK)
+    f(18, 11, 4, 1, INK); f(18, 14, 4, 1, INK); f(18, 11, 1, 4, INK); f(21, 11, 1, 4, INK); f(12, 12, 6, 1, INK)
+    f(10, 15, 10, 5, '#3A3A3C'); f(11, 16, 8, 3, '#24303A'); f(8, 20, 14, 2, '#8E929A')
+    f(12, 16, 3, 1, '#3BE07A', 'tw'); f(13, 17, 4, 1, '#4FC3E8'); f(12, 18, 2, 1, '#F5C542', 'tw')
+  },
+  debugger: f => {
+    crabBody(f)
+    f(8, 7, 14, 3, '#1D9E75'); f(20, 9, 5, 1, '#147A5A')
+    f(25, 4, 1, 10, '#7A4A26'); f(23, 1, 4, 2, 'rgba(201,204,210,.35)')
+    stamp(f, 22, 0, ['.nnnn.', 'n....n', 'n....n', '.nnnn.'], { n: '#C9CCD2' })
+    stamp(f, 27, 6, ['r.r', 'rrr', '.r.'], { r: '#D0453F' }, 'tw')
+  },
+  electrician: f => {
+    crabBody(f)
+    stamp(f, 7, 6, ['....oooooooo....', '..oooooooooooo..', 'oooooooooooooooo', 'dddddddddddddddd'], { o: '#F59A23', d: '#C47612' })
+    stamp(f, 24, 1, ['..y', '.y.', 'yyy', '.y.', 'y..'], { y: '#F5C542' }, 'tw')
+    f(1, 18, 1, 5, INK); f(0, 23, 3, 2, '#8E929A')
+  },
+  mechanic: f => {
+    crabBody(f, -4)
+    f(8, 7, 14, 3, '#D0453F'); f(4, 9, 5, 1, '#9A2F2A'); f(17, 15, 2, 1, '#5A3519')
+    stamp(f, 23, 3, ['.g.g.', 'ggggg', '.gkg.', 'ggggg', '.g.g.'], { g: '#8E929A', k: '#3A3A3C' }, 'gr')
+  },
+  vr: f => {
+    crabBody(f)
+    f(7, 10, 16, 1, '#3A3A3C'); f(7, 11, 16, 4, '#E6E8EE'); f(9, 12, 4, 2, '#7F77DD', 'tw'); f(17, 12, 4, 2, '#7F77DD', 'tw')
+    f(2, 4, 2, 2, '#4FC3E8', 'tw'); f(26, 3, 2, 2, '#E8559A', 'tw')
+  },
+  welder: f => {
+    crabBody(f, -4)
+    stamp(f, 7, 7, ['..mmmmmmmmmmmm..', '.mmmmmmmmmmmmmm.', 'mmmmmmmmmmmmmmmm', 'mmmmmmmmmmmmmmmm', 'mmmkkkkkkkkkkmmm', 'mmmmmmmmmmmmmmmm', 'mmmmmmmmmmmmmmmm'], { m: '#3E5A6B', k: '#4FE3C1' })
+    f(25, 8, 1, 6, '#8E929A'); f(25, 6, 1, 2, '#F59A23', 'tw')
+    f(27, 5, 1, 1, '#F5C542', 'tw'); f(23, 4, 1, 1, '#F5C542', 'tw'); f(28, 8, 1, 1, '#F5C542', 'tw')
+  },
+  network: f => {
+    crabBody(f)
+    f(9, 7, 12, 3, '#2A2A2C'); f(10, 3, 1, 4, '#2A2A2C'); f(19, 3, 1, 4, '#2A2A2C')
+    f(11, 8, 1, 1, '#3BE07A', 'tw'); f(13, 8, 1, 1, '#3BE07A'); f(15, 8, 1, 1, '#F5C542', 'tw')
+    stamp(f, 22, 0, ['.bbbbb.', 'b.....b', '..bbb..', '.b...b.', '...b...'], { b: '#4FC3E8' }, 'tw')
+  },
+  rocketeer: f => {
+    crabBody(f, -4)
+    f(8, 8, 14, 1, '#7A4A26'); f(9, 6, 4, 3, '#C9CCD2'); f(17, 6, 4, 3, '#C9CCD2'); f(10, 7, 2, 1, '#7FC8F0'); f(18, 7, 2, 1, '#7FC8F0')
+    stamp(f, 23, 0, ['..w..', '.www.', '.wbw.', '.www.', 'rwwwr', 'r.y.r'], { w: '#F4F3EE', b: '#4FC3E8', r: '#D0453F', y: '#F59A23' }, 'rk')
+    f(25, 6, 1, 2, '#F5C542', 'tw')
+  },
+  security: f => {
+    crabBody(f, -4)
+    f(8, 7, 14, 3, '#24407A'); f(20, 9, 5, 1, INK); f(14, 7, 2, 2, '#F5C542')
+    stamp(f, 23, 3, ['.sss.', 's...s', 's...s', 'yyyyy', 'yykyy', 'yykyy', 'yyyyy'], { s: '#8E929A', y: '#F5C542', k: INK })
+  },
+  dataviz: f => {
+    crabBody(f, -4)
+    f(22, 0, 7, 6, '#F8F6F1')
+    stamp(f, 22, 0, ['wwwwwww', 'w.....w', 'w....gw', 'w..bbgw', 'w.rbbgw', 'wwwwwww'], { w: '#C9CCD2', g: '#1D9E75', b: '#378ADD', r: '#D0453F' })
+    f(14, 16, 2, 4, '#378ADD')
+  },
   other: f => crabBody(f),
 }
 
-const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
+// A savvy worker wears its tier; any other subagent takes the next costume in turn.
+const ROTATION = [
+  'explore', 'heavy', 'careful', 'hacker', 'wizard', 'cowboy', 'scientist', 'ninja', 'medium', 'coder', 'viking', 'king', 'debugger',
+  'party', 'light', 'electrician', 'magician', 'witch', 'mechanic', 'graduate', 'fable', 'vr', 'dj', 'farmer', 'welder', 'sailor',
+  'firefighter', 'network', 'doctor', 'artist', 'rocketeer', 'robot', 'knight', 'security', 'clown', 'scuba', 'dataviz', 'santa', 'beanie', 'cat',
+]
+const costumeFor = (type: string, list: AgentRun[]): string =>
+  tierOf(type) !== 'other' ? tierOf(type) : (ROTATION[list.filter(a => tierOf(a.type) === 'other').length % ROTATION.length] ?? 'other')
+
+// Runs stored before costumes were kept fall back to the old pick.
+const costumeOf = (a: AgentRun): string => a.costume ?? (a.type === 'Explore' ? 'explore' : tierOf(a.type))
 
 const CRAB_SCALE = 1.1
 
@@ -712,7 +919,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   return svg(
     W,
     66,
-    `${rowCrab(W, 0, 14, costumeOf(a.type), false, a.status === 'running')}
+    `${rowCrab(W, 0, 14, costumeOf(a), false, a.status === 'running')}
 <text class="t" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
 ${steps && stepsW > 30 ? `<text class="t" ${startText(W, 42, 49)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
@@ -742,8 +949,8 @@ ${statusMark(mx(W, W - 8), 16, 'planned', color)}
 
 const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>): string => {
   const icons = [
-    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: 'running', dim: false })),
-    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: a.status, dim: false })),
+    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a), c: colorOf(tierOf(a.type)), s: 'running', dim: false })),
+    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a), c: colorOf(tierOf(a.type)), s: a.status, dim: false })),
     ...planned.map(p => ({ k: p.tier in TIER_COLOR ? p.tier : 'other', c: colorOf(p.tier), s: 'planned', dim: true })),
   ]
   const fit = Math.max(1, Math.floor((W - 150) / 36))
@@ -964,6 +1171,7 @@ export const register: Register = (on, options) => {
         costUsd: 0,
         steps: 0,
         round,
+        costume: costumeFor(e.subagentType, list),
       }
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })

@@ -31,3 +31,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(drawn).toContain('Read · register.tsx')
   })
 }
+
+test('desktop: each new subagent wears the next costume in turn', async ($, on) => {
+  mock.clock(on, { now: 0 })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('agent.spawn', (_$, e) => ({ model: 'claude-sonnet-5-5', agentId: `agent-${e.tool_use_id}` }))
+
+  for (let i = 1; i <= 40; i++) await $.agent.spawn(spawn(String(i), `Task ${i}`))
+
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'Pane', requestId: 'savvy-agents', props: pane })
+  const drawn = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
+  // 40 subagents, 40 different looks, none of them the bare crab.
+  expect(new Set(drawn.match(/class="c-[a-z]+/g)).size).toBe(40)
+  expect(drawn).not.toContain('c-other')
+})
