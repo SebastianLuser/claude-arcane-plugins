@@ -1,7 +1,10 @@
-import type { AgentNode, Child, ChildKind, Flow, Loop, Run, Status } from '../types'
+import type { AgentNode, Child, ChildKind, Flow, Loop, Round, Run, Status } from '../types'
 
 const MAX_RUNS = 5
 const MAX_NAME = 40
+const MAX_TASK = 120
+const MAX_RESULT = 1200
+const MAX_ROUNDS = 8
 
 export const EMPTY: Flow = { runs: [], loop: null }
 
@@ -38,7 +41,16 @@ export function startRun(flow: Flow, id: string, name: string, at: number): Flow
   return { ...flow, runs: [...flow.runs.filter(r => r.id !== id), run].slice(-MAX_RUNS) }
 }
 
-export type Spawn = { toolUseId: string; runId: string; index: number; agentId: string | null; name: string; at: number }
+export type Spawn = {
+  toolUseId: string
+  runId: string
+  index: number
+  agentId: string | null
+  name: string
+  at: number
+  model?: string | null
+  task?: string | null
+}
 
 export function addAgent(flow: Flow, spawn: Spawn): Flow {
   const owner =
@@ -47,13 +59,21 @@ export function addAgent(flow: Flow, spawn: Spawn): Flow {
   // A resumed or server-launched run has no Workflow call this session saw: it gets its own node.
   const base = owner ? flow : startRun(flow, spawn.toolUseId || spawn.runId, 'workflow', spawn.at)
   const runKey = owner?.id ?? (spawn.toolUseId || spawn.runId)
+  const name = clip(spawn.name || `agent ${spawn.index}`)
+  const task = spawn.task ? clip(spawn.task, MAX_TASK) : null
   const agent: AgentNode = {
     agentId: spawn.agentId,
     index: spawn.index,
-    name: clip(spawn.name || `agent ${spawn.index}`),
+    name,
     status: 'running',
     children: [],
     counts: {},
+    model: spawn.model ?? null,
+    task: task && task !== name ? task : null,
+    startedAt: spawn.at,
+    endedAt: null,
+    result: null,
+    failure: null,
   }
   return mapRun(base, runKey, run => ({
     ...run,
@@ -74,9 +94,50 @@ export function noteTool(flow: Flow, agentId: string, tool: ToolKind): Flow {
   })
 }
 
-export function finishAgent(flow: Flow, agentId: string, reason: string): Flow {
+export function finishAgent(flow: Flow, agentId: string, reason: string, answer = '', at: number | null = null): Flow {
   const status: Status = reason === 'answer' ? 'ok' : 'error'
-  return mapAgent(flow, agentId, agent => ({ ...agent, status }))
+  const result = answer.trim() ? clip(answer, MAX_RESULT) : null
+  return mapAgent(flow, agentId, agent => ({ ...agent, status, endedAt: at, result, failure: status === 'error' ? reason : null }))
+}
+
+/** How long the run has taken: until its last agent ended, or until now while one works. */
+export function runMs(run: Run, now: number): number {
+  const isRunning = runStatus(run) === 'running'
+  const end = isRunning ? now : Math.max(run.startedAt, ...run.agents.map(a => a.endedAt ?? 0))
+  return Math.max(0, end - run.startedAt)
+}
+
+export function agentMs(agent: AgentNode, now: number): number | null {
+  if (agent.startedAt === undefined) return null
+  return Math.max(0, (agent.endedAt ?? now) - agent.startedAt)
+}
+
+export function durationText(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+/** `claude-haiku-5-5` → `haiku 5.5`; an alias stays as it is. */
+export function modelText(model: string): string {
+  return model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)(?:[-@].*)?$/, ' $1.$2')
+}
+
+/** The common cron shapes in words; anything else as the expression itself. */
+export function cronText(cron: string): string {
+  const f = cron.trim().split(/\s+/)
+  if (f.length !== 5) return cron
+  const [min, hour, dom, mon, dow] = f as [string, string, string, string, string]
+  const rest = dom === '*' && mon === '*' && dow === '*'
+  const step = (field: string) => /^\*\/(\d+)$/.exec(field)?.[1]
+  if (rest && hour === '*' && min === '*') return 'every minute'
+  if (rest && hour === '*' && step(min)) return `every ${step(min)} min`
+  if (rest && hour === '*' && /^\d+$/.test(min)) return `every hour at :${min.padStart(2, '0')}`
+  if (rest && step(hour) && /^\d+$/.test(min)) return `every ${step(hour)} h`
+  if (rest && /^\d+$/.test(hour) && /^\d+$/.test(min)) return `every day at ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
+  return cron
 }
 
 export function hasAgent(flow: Flow, agentId: string): boolean {
@@ -89,8 +150,14 @@ export function runStatus(run: Run): Status {
 }
 
 // A routine or scheduled task also fires a scheduled prompt: only a loop this session saw scheduled wakes.
-export function loopWake(flow: Flow): Flow {
-  return isLive(flow.loop) ? setLoop(flow, { stage: 'wake', round: flow.loop.round + 1, nextAt: null }) : flow
+export function loopWake(flow: Flow, at: number | null = null): Flow {
+  if (!isLive(flow.loop)) return flow
+  const round = flow.loop.round + 1
+  return setLoop(flow, { stage: 'wake', round, nextAt: null, ...(at === null ? {} : { rounds: addRound(flow.loop.rounds, { round, at, ms: null }) }) })
+}
+
+function addRound(rounds: Round[] | undefined, round: Round): Round[] {
+  return [...(rounds ?? []).filter(r => r.round !== round.round), round].slice(-MAX_ROUNDS)
 }
 
 export function loopWork(flow: Flow): Flow {
@@ -98,20 +165,25 @@ export function loopWork(flow: Flow): Flow {
 }
 
 // `/loop` starts working before it schedules anything: the pane shows round 1 at once.
-export function loopBegin(flow: Flow): Flow {
-  return isLive(flow.loop) ? flow : { ...flow, loop: { stage: 'work', round: 1, nextAt: null, cron: null } }
+export function loopBegin(flow: Flow, at: number | null = null): Flow {
+  if (isLive(flow.loop)) return flow
+  const loop: Loop = { stage: 'work', round: 1, nextAt: null, cron: null }
+  return { ...flow, loop: at === null ? loop : { ...loop, rounds: [{ round: 1, at, ms: null }] } }
 }
 
-export function loopSchedule(flow: Flow, nextAt: number | null, cron: string | null = null): Flow {
-  const loop: Loop = isLive(flow.loop) ? flow.loop : { stage: 'schedule', round: 1, nextAt, cron }
-  return { ...flow, loop: { ...loop, stage: 'schedule', nextAt, cron: cron ?? loop.cron } }
+export function loopSchedule(flow: Flow, nextAt: number | null, cron: string | null = null, prompt: string | null = null, at: number | null = null): Flow {
+  const fresh: Loop = { stage: 'schedule', round: 1, nextAt, cron }
+  const loop: Loop = isLive(flow.loop) ? flow.loop : at === null ? fresh : { ...fresh, rounds: [{ round: 1, at, ms: null }] }
+  const text = prompt ? clip(prompt, MAX_TASK) : null
+  return { ...flow, loop: { ...loop, stage: 'schedule', nextAt, cron: cron ?? loop.cron, ...(text ? { prompt: text } : {}) } }
 }
 
 // A cron job re-arms itself when the turn ends, so its next time is worked out again each round.
-export function loopWait(flow: Flow, now: number): Flow {
+export function loopWait(flow: Flow, now: number, ms: number | null = null): Flow {
   if (!isLive(flow.loop)) return flow
   const nextAt = flow.loop.cron ? nextCron(flow.loop.cron, now) : flow.loop.nextAt
-  return setLoop(flow, { stage: 'wait', nextAt })
+  const rounds = flow.loop.rounds?.map(r => (r.round === flow.loop!.round && r.ms === null && ms !== null ? { ...r, ms } : r))
+  return setLoop(flow, { stage: 'wait', nextAt, ...(rounds ? { rounds } : {}) })
 }
 
 const CRON_RANGES: [number, number][] = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]]

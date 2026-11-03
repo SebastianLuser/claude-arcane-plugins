@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { EMPTY, addAgent, classifyTool, finishAgent, loopBegin, loopSchedule, loopStop, loopWait, loopWake, loopWork, nextCron, noteTool, runStatus, startRun, workflowName } from '../hooks/flow'
+import { EMPTY, addAgent, classifyTool, cronText, durationText, finishAgent, modelText, runMs, loopBegin, loopSchedule, loopStop, loopWait, loopWake, loopWork, nextCron, noteTool, runStatus, startRun, workflowName } from '../hooks/flow'
 
 function spawn(index: number, agentId: string, toolUseId = 'toolu_wf') {
   return { toolUseId, runId: 'wf_1', index, agentId, name: `review ${index}`, at: 2 }
@@ -163,5 +163,44 @@ describe('loop stages', () => {
     expect(loopBegin(EMPTY).loop).toEqual({ stage: 'work', round: 1, nextAt: null, cron: null })
     const running = loopWake(loopSchedule(EMPTY, 1))
     expect(loopBegin(running)).toBe(running)
+  })
+})
+
+describe('details', () => {
+  test('should put a cron in words when it has a common shape and keep it as is otherwise', () => {
+    expect(cronText('*/30 * * * *')).toBe('every 30 min')
+    expect(cronText('* * * * *')).toBe('every minute')
+    expect(cronText('7 * * * *')).toBe('every hour at :07')
+    expect(cronText('0 */2 * * *')).toBe('every 2 h')
+    expect(cronText('30 9 * * *')).toBe('every day at 09:30')
+    expect(cronText('0 9 * * 1-5')).toBe('0 9 * * 1-5')
+  })
+
+  test('should shorten model ids and durations', () => {
+    expect(modelText('claude-haiku-5-5')).toBe('haiku 5.5')
+    expect(modelText('haiku')).toBe('haiku')
+    expect([durationText(850), durationText(12_400), durationText(184_000), durationText(3_900_000)]).toEqual(['850ms', '12s', '3m 4s', '1h 5m'])
+  })
+
+  test('should keep the answer, the time and why an agent failed when it ends', () => {
+    let flow = addAgent(startRun(EMPTY, 'toolu_wf', 'w', 1000), { toolUseId: 'toolu_wf', runId: 'wf', index: 1, agentId: 'a1', name: 'bugs', at: 1000, model: 'claude-haiku-5-5', task: 'find bugs in the parser' })
+    flow = addAgent(flow, { toolUseId: 'toolu_wf', runId: 'wf', index: 2, agentId: 'a2', name: 'perf', at: 1000, task: 'perf' })
+    flow = finishAgent(flow, 'a1', 'answer', '  Two bugs\n in parse()  ', 7000)
+    flow = finishAgent(flow, 'a2', 'aborted', '', 9000)
+    const [a1, a2] = flow.runs[0]!.agents
+    expect(a1).toMatchObject({ status: 'ok', model: 'claude-haiku-5-5', task: 'find bugs in the parser', endedAt: 7000, result: 'Two bugs in parse()', failure: null })
+    expect(a2).toMatchObject({ status: 'error', task: null, result: null, failure: 'aborted' })
+    expect(runMs(flow.runs[0]!, 0)).toBe(8000)
+  })
+
+  test('should keep each round with its start and length when the loop wakes and waits', () => {
+    let flow = loopSchedule(EMPTY, 60_000, '*/30 * * * *', 'echo loop', 1000)
+    flow = loopWait(flow, 2000, 900)
+    flow = loopWake(flow, 61_000)
+    expect(flow.loop?.prompt).toBe('echo loop')
+    expect(flow.loop?.rounds).toEqual([
+      { round: 1, at: 1000, ms: 900 },
+      { round: 2, at: 61_000, ms: null },
+    ])
   })
 })

@@ -1,5 +1,5 @@
 import type { AgentNode, ChildKind, Loop, LoopStage, Run, Status } from '../types'
-import { runStatus } from './flow'
+import { agentMs, durationText, modelText, runMs, runStatus } from './flow'
 
 export const VIOLET = '#B138C1'
 export const STATUS_COLOR: Record<Status, string> = { running: '#378ADD', ok: '#1D9E75', error: '#E5484D' }
@@ -57,11 +57,17 @@ function statusIcon(x: number, y: number, status: Status): string {
   return `<circle cx="${x}" cy="${y}" r="8" fill="${color}"/><path d="M${x - 3} ${y - 3}l6 6M${x + 3} ${y - 3}l-6 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>`
 }
 
-function countsLine(agent: AgentNode): string {
-  return Object.entries(agent.counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([tool, n]) => `${tool} ×${n}`)
-    .join(' · ')
+/** Model, time and tool counts: the line under an agent's name. */
+// The pane redraws on changes only, so a running agent's time would freeze: only an ended one shows it.
+export function countsLine(agent: AgentNode): string {
+  const ms = agent.endedAt != null ? agentMs(agent, agent.endedAt) : null
+  return [
+    ...(agent.model ? [modelText(agent.model)] : []),
+    ...(ms === null ? [] : [durationText(ms)]),
+    ...Object.entries(agent.counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([tool, n]) => `${tool} ×${n}`),
+  ].join(' · ')
 }
 
 function legend(x: number, y: number, items: [string, string][]): string {
@@ -112,7 +118,7 @@ export function workflowSvg(W: number, run: Run): { source: string; height: numb
     `<rect x="0" y="0" width="${W}" height="${HEADER - 12}" rx="8" class="bg"/>`,
     `<rect x="0" y="0" width="4" height="${HEADER - 12}" rx="2" fill="${VIOLET}"/>`,
     label(14, 20, fit(run.name, W - 190, 14), 14, 't', ' font-weight="700"'),
-    label(W - 12, 20, `${done}/${run.agents.length} agents · ${STATUS_LABEL[status]}`, 12, 's', ' text-anchor="end"'),
+    label(W - 12, 20, `${done}/${run.agents.length} agents · ${STATUS_LABEL[status]}${status === 'running' ? '' : ` · ${durationText(runMs(run, 0))}`}`, 12, 's', ' text-anchor="end"'),
     progressBar(14, 30, W - 26, run.agents),
     isRunning ? `<rect x="6" y="${rootY - 20}" width="${rootW - 4}" height="40" rx="12" fill="${VIOLET}" fill-opacity=".12" class="halo"/>` : '',
     `<rect x="8" y="${rootY - 17}" width="${rootW - 8}" height="34" rx="10" fill="${VIOLET}" fill-opacity="0.15" stroke="${VIOLET}" stroke-width="1.5"/>`,

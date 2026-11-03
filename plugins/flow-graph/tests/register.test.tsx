@@ -220,3 +220,34 @@ test('should ignore ordinary turns and tool calls outside a workflow', async ($,
   expect((await ui.find({ type: 'Text', text: /No workflow or/ }))?.text).toContain('has run in this session')
   await ui.unmount()
 })
+
+test('should list each agent with its model, time, task and answer under the graph, and never its prompt', async ($, on) => {
+  standInEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_wf', script: SCRIPT } as never)
+  for (const index of [1, 2]) await $.agent.spawn(spawn(index))
+  await $.turn.complete({ reason: 'answer', answer: `Found ${'a long answer '.repeat(30)}`, durationMs: 1, isAborted: false, turnId: 't', agentId: 'agent-1' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^1\. bugs/ }))?.text).toBe('1. bugs · sonnet 5.5 · 0ms')
+  expect((await ui.find({ type: 'Text', text: /^Found/ }))?.text).toMatch(/…$/)
+  expect(await ui.find({ type: 'Text', text: /working…/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /secret prompt/ })).toBeUndefined()
+  await ui.press({ key: 'more-toolu_wf|1' })
+  expect((await ui.find({ type: 'Text', text: /^Found/ }))?.text).not.toMatch(/…$/)
+  await ui.unmount()
+})
+
+test('should say what a cron loop runs and how often', async ($, on) => {
+  standInEngine(on, new Date(2026, 10, 3, 14, 0).getTime())
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  await $.tool.call({ tool: 'CronCreate', cron: '*/30 * * * *', prompt: 'echo loop de prueba', recurring: true } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^Runs/ }))?.text).toBe('Runs · echo loop de prueba')
+  expect((await ui.find({ type: 'Text', text: /^Every/ }))?.text).toBe('Every · every 30 min (*/30 * * * *)')
+  expect((await ui.find({ type: 'Text', text: /^round 1/ }))?.text).toBe('round 1 · 14:00 · working…')
+  await ui.unmount()
+})
