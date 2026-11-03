@@ -54,7 +54,6 @@ export type Spawn = {
 }
 
 export const SUBAGENTS_ID = 'subagents'
-const MAX_ACTS = 8
 
 /** An Agent tool call outside a workflow: listed in its own group, newest last. */
 export function addSubagent(flow: Flow, spawn: Spawn): Flow {
@@ -71,24 +70,6 @@ export function noteSession(flow: Flow, kind: ChildKind, name: string): Flow {
   return { ...flow, [key]: { ...counts, [clipped]: (counts[clipped] ?? 0) + 1 } }
 }
 
-/** What a settings hook's answer did, in a few words; null when it let the event pass as it was. */
-export function hookEffect(out: Record<string, unknown>): string | null {
-  if (typeof out.block === 'string') return `blocked: ${clip(out.block, MAX_TASK)}`
-  if (out.permissionDecision === 'deny' || out.permissionDecision === 'ask') {
-    const reason = typeof out.permissionDecisionReason === 'string' ? `: ${clip(out.permissionDecisionReason, MAX_TASK)}` : ''
-    return `${out.permissionDecision === 'deny' ? 'denied the tool' : 'asked for permission'}${reason}`
-  }
-  if (out.preventContinuation) return 'stopped the session'
-  if (Array.isArray(out.additionalContext) && out.additionalContext.length > 0) return 'added context for Claude'
-  if (out.updatedToolOutput !== undefined || out.updatedMCPToolOutput !== undefined) return 'changed the tool output'
-  return null
-}
-
-export function noteHook(flow: Flow, event: string, effect: string | null, at: number): Flow {
-  const events = { ...(flow.hookEvents ?? {}), [event]: (flow.hookEvents?.[event] ?? 0) + 1 }
-  if (!effect) return { ...flow, hookEvents: events }
-  return { ...flow, hookEvents: events, hookActs: [...(flow.hookActs ?? []), { event, text: effect, at }].slice(-MAX_ACTS) }
-}
 
 export function addAgent(flow: Flow, spawn: Spawn): Flow {
   const owner =

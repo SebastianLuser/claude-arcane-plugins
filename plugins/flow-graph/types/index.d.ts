@@ -29,12 +29,6 @@ export type AgentNode = {
   type?: string | null
 }
 
-export type HookAct = {
-  event: string
-  text: string
-  at: number
-}
-
 export type Run = {
   id: string
   runId: string | null
@@ -72,10 +66,6 @@ export type Flow = {
   /** Skills and MCP servers the main session used, with how many times. */
   skills?: Record<string, number>
   mcp?: Record<string, number>
-  /** How many times each settings hook event fired. */
-  hookEvents?: Record<string, number>
-  /** The latest times a settings hook did something: blocked, asked, added context. */
-  hookActs?: HookAct[]
 }
 
 declare module 'claude-code' {

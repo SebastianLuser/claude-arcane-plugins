@@ -5,8 +5,6 @@ import {
   EMPTY,
   addAgent,
   addSubagent,
-  hookEffect,
-  noteHook,
   noteSession,
   classifyTool,
   cronText,
@@ -102,15 +100,6 @@ export const register: Register = on => {
     return prompt
   }).catch(($, e, next) => next(e))
 
-  // Settings hooks: count each event and keep the times a hook did something.
-  on('classic.*', async ($, e, next) => {
-    const out = await next(e)
-    const effect = hookEffect((out ?? {}) as Record<string, unknown>)
-    const now = await $.clock.now()
-    await change($, flow => noteHook(flow, next.event.replace(/^classic\./, ''), effect, now))
-    return out
-  }).catch(($, e, next) => next(e))
-
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined) return started
@@ -183,7 +172,7 @@ export const register: Register = on => {
     const run = flow.runs.at(-1) ?? null
     const older = flow.runs.length - 1
 
-    const hasSession = !!flow.subagents || Object.keys(flow.skills ?? {}).length + Object.keys(flow.mcp ?? {}).length + Object.keys(flow.hookEvents ?? {}).length > 0
+    const hasSession = !!flow.subagents || Object.keys(flow.skills ?? {}).length + Object.keys(flow.mcp ?? {}).length > 0
     const expanded = new Set(await read($, expandedAtom))
     const toggle = (key: string) => () =>
       void update($, expandedAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list, key]))
@@ -335,13 +324,11 @@ function counted(entries: [string, number][]): string {
 
 const SHOWN_SUBAGENTS = 6
 
-/** What ran outside workflows: subagents, the main session's skills and MCP servers, and settings hooks. */
+/** What ran outside workflows: subagents, the main session's skills and MCP servers. */
 function sessionDetails(ui: Elements, flow: Flow, expanded: Set<string>, toggle: (key: string) => () => void) {
   const { Box, Text } = ui
   const skills = Object.entries(flow.skills ?? {})
   const mcp = Object.entries(flow.mcp ?? {})
-  const events = Object.entries(flow.hookEvents ?? {})
-  const acts = [...(flow.hookActs ?? [])].reverse()
   const group = flow.subagents ?? null
   return (
     <Box key="session-info" flexDirection="column" gap={1}>
@@ -368,24 +355,6 @@ function sessionDetails(ui: Elements, flow: Flow, expanded: Set<string>, toggle:
             </Text>
           )}
           <Text dimColor>A skill is a set of instructions Claude loads for one kind of task, like /loop or a review checklist.</Text>
-        </Box>
-      )}
-      {events.length > 0 && (
-        <Box flexDirection="column">
-          <Text bold color={VIOLET}>
-            HOOKS <Text dimColor>· settings hooks, from settings.json</Text>
-          </Text>
-          <Text dimColor>Points reached: {counted(events)}</Text>
-          {acts.length === 0 ? (
-            <Text dimColor>No hook blocked, asked, changed or added anything yet.</Text>
-          ) : (
-            acts.map(act => (
-              <Text key={`act-${act.at}-${act.event}`} color={/^(blocked|denied|stopped)/.test(act.text) ? 'warning' : undefined}>
-                {clockText(act.at)} · {act.event} <Text dimColor>· {act.text}</Text>
-              </Text>
-            ))
-          )}
-          <Text dimColor>Hooks from managed settings and from mods run where this pane cannot see them.</Text>
         </Box>
       )}
     </Box>
