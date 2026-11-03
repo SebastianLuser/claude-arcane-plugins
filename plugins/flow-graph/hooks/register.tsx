@@ -4,6 +4,10 @@ import type { EngineInterface, Register } from 'claude-code'
 import {
   EMPTY,
   addAgent,
+  addSubagent,
+  hookEffect,
+  noteHook,
+  noteSession,
   classifyTool,
   cronText,
   durationText,
@@ -61,6 +65,9 @@ export const register: Register = on => {
     if (e.agentId) {
       const agentId = e.agentId
       await change($, flow => (hasAgent(flow, agentId) ? noteTool(flow, agentId, classifyTool(e.tool, args.skill)) : flow))
+    } else if (e.tool.startsWith('mcp__')) {
+      const tool = classifyTool(e.tool, null)
+      await change($, flow => noteSession(flow, 'mcp', tool.name))
     } else if (e.tool === 'ScheduleWakeup' && args.stop === true) {
       await change($, loopStop)
     } else if (e.tool === 'CronDelete') {
@@ -88,9 +95,40 @@ export const register: Register = on => {
     return prompt
   }).catch(($, e, next) => next(e))
 
+  // Every skill the main session loads, a slash command's or the Skill tool's; an agent's are counted on the agent.
+  on('skill.prompt', async ($, e, next) => {
+    const prompt = await next(e)
+    if (!(e as { agentId?: string }).agentId) await change($, flow => noteSession(flow, 'skill', e.skill))
+    return prompt
+  }).catch(($, e, next) => next(e))
+
+  // Settings hooks: count each event and keep the times a hook did something.
+  on('classic.*', async ($, e, next) => {
+    const out = await next(e)
+    const effect = hookEffect((out ?? {}) as Record<string, unknown>)
+    const now = await $.clock.now()
+    await change($, flow => noteHook(flow, next.event.replace(/^classic\./, ''), effect, now))
+    return out
+  }).catch(($, e, next) => next(e))
+
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
-    if (started.deny !== undefined || !e.workflow) return started
+    if (started.deny !== undefined) return started
+    if (!e.workflow) {
+      const solo = {
+        toolUseId: e.tool_use_id,
+        runId: '',
+        index: 0,
+        agentId: started.agentId ?? null,
+        name: e.name || e.description,
+        at: await $.clock.now(),
+        model: started.model || null,
+        task: e.description,
+        type: e.subagentType,
+      }
+      await change($, flow => addSubagent(flow, solo))
+      return started
+    }
     const runId = e.workflow.runId
     // A run launched without a Workflow call this session saw brings the pane up with its first agent.
     const isFirst = !(await read($, flowAtom)).runs.some(r => (e.tool_use_id && r.id === e.tool_use_id) || (runId && r.runId === runId))
@@ -104,6 +142,7 @@ export const register: Register = on => {
       model: started.model || null,
       // The description only: a workflow agent's prompt can carry the whole script.
       task: e.description,
+      type: e.subagentType,
     }
     await change($, flow => addAgent(flow, spawn))
     if (isFirst) await openPane($)
@@ -144,19 +183,25 @@ export const register: Register = on => {
     const run = flow.runs.at(-1) ?? null
     const older = flow.runs.length - 1
 
+    const hasSession = !!flow.subagents || Object.keys(flow.skills ?? {}).length + Object.keys(flow.mcp ?? {}).length + Object.keys(flow.hookEvents ?? {}).length > 0
+    const expanded = new Set(await read($, expandedAtom))
+    const toggle = (key: string) => () =>
+      void update($, expandedAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list, key]))
+    const sessionInfo = hasSession ? sessionDetails(ui, flow, expanded, toggle) : null
+
     if (!run && !flow.loop) {
       return (
-        <Box flexDirection="column">
-          <Text bold color={VIOLET}>FLOWS</Text>
-          <Text dimColor>No workflow or /loop has run in this session yet.</Text>
-          <Text dimColor>This pane opens by itself when a /loop starts or a workflow launches its first agent.</Text>
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="column">
+            <Text bold color={VIOLET}>FLOWS</Text>
+            <Text dimColor>No workflow or /loop has run in this session yet.</Text>
+            <Text dimColor>This pane opens by itself when a /loop starts or a workflow launches its first agent.</Text>
+          </Box>
+          {sessionInfo}
         </Box>
       )
     }
 
-    const expanded = new Set(await read($, expandedAtom))
-    const toggle = (key: string) => () =>
-      void update($, expandedAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list, key]))
     const loopInfo = flow.loop ? loopDetails(ui, flow.loop) : null
     const runInfo = run ? runDetails(ui, run, expanded, toggle) : null
 
@@ -190,6 +235,7 @@ export const register: Register = on => {
           )}
           {runInfo}
           {older > 0 && <Text dimColor>{older} earlier workflows in this session</Text>}
+          {sessionInfo}
         </Box>
       )
     }
@@ -209,6 +255,7 @@ export const register: Register = on => {
         {loopInfo}
         {run && <Text bold color={VIOLET}>WORKFLOW · {run.name} <Text dimColor>· {STATUS_LABEL[runStatus(run)]}</Text></Text>}
         {runInfo}
+        {sessionInfo}
         <Text dimColor>The graph is drawn in the desktop app.</Text>
       </Box>
     )
@@ -223,6 +270,7 @@ function loopDetails({ Box, Text }: Elements, loop: Loop) {
   const cadence = loop.cron ? `${cronText(loop.cron)} (${loop.cron})` : loop.nextAt !== null ? 'Claude picks the next time each round' : null
   return (
     <Box key="loop-info" flexDirection="column">
+      <Text dimColor>A loop runs the same prompt again on a schedule: wake, work, schedule the next round, wait.</Text>
       {loop.prompt && (
         <Text>
           Runs <Text dimColor>· {loop.prompt}</Text>
@@ -261,7 +309,7 @@ function agentBlock({ Box, Text, Button }: Elements, run: Run, agent: AgentNode,
   const isOpen = expanded.has(key)
   const result = agent.result ?? null
   const isLong = !!result && result.length > SHORT_RESULT
-  const line = countsLine(agent)
+  const line = countsLine(agent, true)
   const color = agent.status === 'error' ? 'error' : agent.status === 'ok' ? 'success' : undefined
   return (
     <Box key={key} flexDirection="column">
@@ -274,6 +322,72 @@ function agentBlock({ Box, Text, Button }: Elements, run: Run, agent: AgentNode,
       {agent.status === 'running' && <Text dimColor>working…</Text>}
       {result && <Text>{isOpen || !isLong ? result : `${result.slice(0, SHORT_RESULT - 1)}…`}</Text>}
       {isLong && <Button key={`more-${key}`} label={isOpen ? 'Show less' : 'Show all'} onPress={toggle(key)} />}
+    </Box>
+  )
+}
+
+function counted(entries: [string, number][]): string {
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+    .join(' · ')
+}
+
+const SHOWN_SUBAGENTS = 6
+
+/** What ran outside workflows: subagents, the main session's skills and MCP servers, and settings hooks. */
+function sessionDetails(ui: Elements, flow: Flow, expanded: Set<string>, toggle: (key: string) => () => void) {
+  const { Box, Text } = ui
+  const skills = Object.entries(flow.skills ?? {})
+  const mcp = Object.entries(flow.mcp ?? {})
+  const events = Object.entries(flow.hookEvents ?? {})
+  const acts = [...(flow.hookActs ?? [])].reverse()
+  const group = flow.subagents ?? null
+  return (
+    <Box key="session-info" flexDirection="column" gap={1}>
+      {group && (
+        <Box flexDirection="column" gap={1}>
+          <Text bold color={VIOLET}>
+            SUBAGENTS <Text dimColor>· started with the Agent tool, outside a workflow</Text>
+          </Text>
+          {group.agents.slice(-SHOWN_SUBAGENTS).map(agent => agentBlock(ui, group, agent, expanded, toggle))}
+          {group.agents.length > SHOWN_SUBAGENTS && <Text dimColor>and {group.agents.length - SHOWN_SUBAGENTS} earlier</Text>}
+        </Box>
+      )}
+      {skills.length + mcp.length > 0 && (
+        <Box flexDirection="column">
+          <Text bold color={VIOLET}>MAIN SESSION</Text>
+          {skills.length > 0 && (
+            <Text>
+              Skills <Text dimColor>· {counted(skills)}</Text>
+            </Text>
+          )}
+          {mcp.length > 0 && (
+            <Text>
+              MCP servers <Text dimColor>· {counted(mcp)}</Text>
+            </Text>
+          )}
+          <Text dimColor>A skill is a set of instructions Claude loads for one kind of task, like /loop or a review checklist.</Text>
+        </Box>
+      )}
+      {events.length > 0 && (
+        <Box flexDirection="column">
+          <Text bold color={VIOLET}>
+            HOOKS <Text dimColor>· settings hooks, from settings.json</Text>
+          </Text>
+          <Text dimColor>Points reached: {counted(events)}</Text>
+          {acts.length === 0 ? (
+            <Text dimColor>No hook blocked, asked, changed or added anything yet.</Text>
+          ) : (
+            acts.map(act => (
+              <Text key={`act-${act.at}-${act.event}`} color={/^(blocked|denied|stopped)/.test(act.text) ? 'warning' : undefined}>
+                {clockText(act.at)} · {act.event} <Text dimColor>· {act.text}</Text>
+              </Text>
+            ))
+          )}
+          <Text dimColor>Hooks from managed settings and from mods run where this pane cannot see them.</Text>
+        </Box>
+      )}
     </Box>
   )
 }

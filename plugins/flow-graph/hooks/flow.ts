@@ -50,6 +50,44 @@ export type Spawn = {
   at: number
   model?: string | null
   task?: string | null
+  type?: string | null
+}
+
+export const SUBAGENTS_ID = 'subagents'
+const MAX_ACTS = 8
+
+/** An Agent tool call outside a workflow: listed in its own group, newest last. */
+export function addSubagent(flow: Flow, spawn: Spawn): Flow {
+  const group: Run = flow.subagents ?? { id: SUBAGENTS_ID, runId: null, name: 'Subagents', startedAt: spawn.at, agents: [] }
+  const index = (group.agents.at(-1)?.index ?? 0) + 1
+  const agent = newAgent({ ...spawn, index })
+  return { ...flow, subagents: { ...group, agents: [...group.agents, agent].slice(-MAX_RUNS * 4) } }
+}
+
+export function noteSession(flow: Flow, kind: ChildKind, name: string): Flow {
+  const key = kind === 'skill' ? 'skills' : 'mcp'
+  const counts = flow[key] ?? {}
+  const clipped = clip(name)
+  return { ...flow, [key]: { ...counts, [clipped]: (counts[clipped] ?? 0) + 1 } }
+}
+
+/** What a settings hook's answer did, in a few words; null when it let the event pass as it was. */
+export function hookEffect(out: Record<string, unknown>): string | null {
+  if (typeof out.block === 'string') return `blocked: ${clip(out.block, MAX_TASK)}`
+  if (out.permissionDecision === 'deny' || out.permissionDecision === 'ask') {
+    const reason = typeof out.permissionDecisionReason === 'string' ? `: ${clip(out.permissionDecisionReason, MAX_TASK)}` : ''
+    return `${out.permissionDecision === 'deny' ? 'denied the tool' : 'asked for permission'}${reason}`
+  }
+  if (out.preventContinuation) return 'stopped the session'
+  if (Array.isArray(out.additionalContext) && out.additionalContext.length > 0) return 'added context for Claude'
+  if (out.updatedToolOutput !== undefined || out.updatedMCPToolOutput !== undefined) return 'changed the tool output'
+  return null
+}
+
+export function noteHook(flow: Flow, event: string, effect: string | null, at: number): Flow {
+  const events = { ...(flow.hookEvents ?? {}), [event]: (flow.hookEvents?.[event] ?? 0) + 1 }
+  if (!effect) return { ...flow, hookEvents: events }
+  return { ...flow, hookEvents: events, hookActs: [...(flow.hookActs ?? []), { event, text: effect, at }].slice(-MAX_ACTS) }
 }
 
 export function addAgent(flow: Flow, spawn: Spawn): Flow {
@@ -59,9 +97,18 @@ export function addAgent(flow: Flow, spawn: Spawn): Flow {
   // A resumed or server-launched run has no Workflow call this session saw: it gets its own node.
   const base = owner ? flow : startRun(flow, spawn.toolUseId || spawn.runId, 'workflow', spawn.at)
   const runKey = owner?.id ?? (spawn.toolUseId || spawn.runId)
+  const agent = newAgent(spawn)
+  return mapRun(base, runKey, run => ({
+    ...run,
+    runId: run.runId ?? (spawn.runId || null),
+    agents: [...run.agents.filter(a => !(a.agentId && a.agentId === spawn.agentId)), agent].sort((a, b) => a.index - b.index),
+  }))
+}
+
+function newAgent(spawn: Spawn): AgentNode {
   const name = clip(spawn.name || `agent ${spawn.index}`)
   const task = spawn.task ? clip(spawn.task, MAX_TASK) : null
-  const agent: AgentNode = {
+  return {
     agentId: spawn.agentId,
     index: spawn.index,
     name,
@@ -74,12 +121,8 @@ export function addAgent(flow: Flow, spawn: Spawn): Flow {
     endedAt: null,
     result: null,
     failure: null,
+    type: spawn.type ?? null,
   }
-  return mapRun(base, runKey, run => ({
-    ...run,
-    runId: run.runId ?? (spawn.runId || null),
-    agents: [...run.agents.filter(a => !(a.agentId && a.agentId === spawn.agentId)), agent].sort((a, b) => a.index - b.index),
-  }))
 }
 
 export function noteTool(flow: Flow, agentId: string, tool: ToolKind): Flow {
@@ -141,7 +184,7 @@ export function cronText(cron: string): string {
 }
 
 export function hasAgent(flow: Flow, agentId: string): boolean {
-  return flow.runs.some(run => run.agents.some(a => a.agentId === agentId))
+  return [...flow.runs, ...(flow.subagents ? [flow.subagents] : [])].some(run => run.agents.some(a => a.agentId === agentId))
 }
 
 export function runStatus(run: Run): Status {
@@ -231,8 +274,10 @@ function mapRun(flow: Flow, id: string, change: (run: Run) => Run): Flow {
 
 function mapAgent(flow: Flow, agentId: string, change: (agent: AgentNode) => AgentNode): Flow {
   if (!hasAgent(flow, agentId)) return flow
+  const inRun = (run: Run): Run => ({ ...run, agents: run.agents.map(a => (a.agentId === agentId ? change(a) : a)) })
   return {
     ...flow,
-    runs: flow.runs.map(run => ({ ...run, agents: run.agents.map(a => (a.agentId === agentId ? change(a) : a)) })),
+    runs: flow.runs.map(inRun),
+    ...(flow.subagents ? { subagents: inRun(flow.subagents) } : {}),
   }
 }

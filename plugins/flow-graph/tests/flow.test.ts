@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { EMPTY, addAgent, classifyTool, cronText, durationText, finishAgent, modelText, runMs, loopBegin, loopSchedule, loopStop, loopWait, loopWake, loopWork, nextCron, noteTool, runStatus, startRun, workflowName } from '../hooks/flow'
+import { EMPTY, addAgent, hookEffect, noteHook, classifyTool, cronText, durationText, finishAgent, modelText, runMs, loopBegin, loopSchedule, loopStop, loopWait, loopWake, loopWork, nextCron, noteTool, runStatus, startRun, workflowName } from '../hooks/flow'
 
 function spawn(index: number, agentId: string, toolUseId = 'toolu_wf') {
   return { toolUseId, runId: 'wf_1', index, agentId, name: `review ${index}`, at: 2 }
@@ -202,5 +202,25 @@ describe('details', () => {
       { round: 1, at: 1000, ms: 900 },
       { round: 2, at: 61_000, ms: null },
     ])
+  })
+})
+
+describe('hooks', () => {
+  test('should say in a few words what a settings hook did, and nothing when it let the event pass', () => {
+    expect(hookEffect({ block: 'no pushes to main' })).toBe('blocked: no pushes to main')
+    expect(hookEffect({ permissionDecision: 'deny', permissionDecisionReason: 'rm -rf' })).toBe('denied the tool: rm -rf')
+    expect(hookEffect({ permissionDecision: 'ask' })).toBe('asked for permission')
+    expect(hookEffect({ additionalContext: ['x'] })).toBe('added context for Claude')
+    expect(hookEffect({ preventContinuation: true })).toBe('stopped the session')
+    expect(hookEffect({ additionalContext: [] })).toBeNull()
+    expect(hookEffect({})).toBeNull()
+  })
+
+  test('should count every event and keep only the times a hook acted', () => {
+    let flow = noteHook(EMPTY, 'PreToolUse', null, 1)
+    flow = noteHook(flow, 'PreToolUse', 'blocked: no', 2)
+    flow = noteHook(flow, 'Stop', null, 3)
+    expect(flow.hookEvents).toEqual({ PreToolUse: 2, Stop: 1 })
+    expect(flow.hookActs).toEqual([{ event: 'PreToolUse', text: 'blocked: no', at: 2 }])
   })
 })

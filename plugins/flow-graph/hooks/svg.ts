@@ -59,9 +59,10 @@ function statusIcon(x: number, y: number, status: Status): string {
 
 /** Model, time and tool counts: the line under an agent's name. */
 // The pane redraws on changes only, so a running agent's time would freeze: only an ended one shows it.
-export function countsLine(agent: AgentNode): string {
+export function countsLine(agent: AgentNode, withType = false): string {
   const ms = agent.endedAt != null ? agentMs(agent, agent.endedAt) : null
   return [
+    ...(withType && agent.type ? [agent.type] : []),
     ...(agent.model ? [modelText(agent.model)] : []),
     ...(ms === null ? [] : [durationText(ms)]),
     ...Object.entries(agent.counts)

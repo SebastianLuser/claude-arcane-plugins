@@ -25,6 +25,14 @@ export type AgentNode = {
   result?: string | null
   /** Why it ended, when not with an answer: aborted, refusal or error. */
   failure?: string | null
+  /** The agent type it runs as: Explore, general-purpose, a plugin's agent. */
+  type?: string | null
+}
+
+export type HookAct = {
+  event: string
+  text: string
+  at: number
 }
 
 export type Run = {
@@ -59,6 +67,15 @@ export type Loop = {
 export type Flow = {
   runs: Run[]
   loop: Loop | null
+  /** Agents started with the Agent tool outside any workflow. */
+  subagents?: Run | null
+  /** Skills and MCP servers the main session used, with how many times. */
+  skills?: Record<string, number>
+  mcp?: Record<string, number>
+  /** How many times each settings hook event fired. */
+  hookEvents?: Record<string, number>
+  /** The latest times a settings hook did something: blocked, asked, added context. */
+  hookActs?: HookAct[]
 }
 
 declare module 'claude-code' {

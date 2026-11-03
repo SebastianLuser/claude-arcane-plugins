@@ -230,7 +230,7 @@ test('should list each agent with its model, time, task and answer under the gra
   await $.turn.complete({ reason: 'answer', answer: `Found ${'a long answer '.repeat(30)}`, durationMs: 1, isAborted: false, turnId: 't', agentId: 'agent-1' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /^1\. bugs/ }))?.text).toBe('1. bugs · sonnet 5.5 · 0ms')
+  expect((await ui.find({ type: 'Text', text: /^1\. bugs/ }))?.text).toBe('1. bugs · general-purpose · sonnet 5.5 · 0ms')
   expect((await ui.find({ type: 'Text', text: /^Found/ }))?.text).toMatch(/…$/)
   expect(await ui.find({ type: 'Text', text: /working…/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /secret prompt/ })).toBeUndefined()
@@ -249,5 +249,23 @@ test('should say what a cron loop runs and how often', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /^Runs/ }))?.text).toBe('Runs · echo loop de prueba')
   expect((await ui.find({ type: 'Text', text: /^Every/ }))?.text).toBe('Every · every 30 min (*/30 * * * *)')
   expect((await ui.find({ type: 'Text', text: /^round 1/ }))?.text).toBe('round 1 · 14:00 · working…')
+  await ui.unmount()
+})
+
+test('should list subagents outside a workflow with their type, and the skills and MCP servers the main session used', async ($, on) => {
+  standInEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  await $.agent.spawn({ tool_use_id: 'toolu_a', prompt: 'secret prompt', description: 'Count plugins', subagentType: 'Explore' } as never)
+  await $.skill.prompt({ skill: 'workflow-authoring', text: 'x' } as never)
+  await $.skill.prompt({ skill: 'workflow-authoring', text: 'x' } as never)
+  await $.tool.call({ tool: 'mcp__github__get_pr' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^SUBAGENTS/ }))).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^1\. Count plugins/ }))?.text).toBe('1. Count plugins · Explore · sonnet 5.5')
+  expect((await ui.find({ type: 'Text', text: /^Skills/ }))?.text).toBe('Skills · workflow-authoring ×2')
+  expect((await ui.find({ type: 'Text', text: /^MCP servers/ }))?.text).toBe('MCP servers · github')
+  expect(await ui.find({ type: 'Text', text: /secret prompt/ })).toBeUndefined()
   await ui.unmount()
 })
