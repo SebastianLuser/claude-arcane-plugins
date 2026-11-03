@@ -118,8 +118,15 @@ test('should open the runbook with migrations, variables and table changes when 
     expect((await ui.find({ type: 'Text', text: /against/ }))?.text).toBe('feat/slug against origin/main')
     expect((await ui.find({ type: 'Text', text: /^● They run/ }))?.text).toBe('● They run on startup; RUN_MIGRATIONS=false turns them off')
     expect((await ui.find({ type: 'Text', text: /^● SLUG_BASE_URL/ }))?.text).toContain('load it in Railway')
-    expect((await ui.find({ type: 'Text', text: /\+ slug/ }))?.props.color).toBe('success')
-    expect((await ui.find({ type: 'Text', text: /- legacy_code/ }))?.props.color).toBe('error')
+    if (surface === 'terminal') {
+      expect((await ui.find({ type: 'Text', text: /\+ slug/ }))?.props.color).toBe('success')
+      expect((await ui.find({ type: 'Text', text: /- legacy_code/ }))?.props.color).toBe('error')
+    } else {
+      const svg = String((await ui.find({ type: 'Svg' }))?.props.source ?? '')
+      expect(svg).toContain('courses')
+      expect(svg).toContain('slug')
+      expect(svg).toContain('legacy_code')
+    }
     await ui.unmount()
   }
 })

@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildReport, changedFiles, deploySteps, isDeployFile, isMigration, isPatchable, splitPatch } from './detect'
+import { buildReport, changedFiles, deploySteps, inRunOrder, isDeployFile, isMigration, isPatchable, splitPatch } from './detect'
+import { tablesSvg } from './svg'
 import type { Corrections, RepoFile } from './detect'
 import type { Consumer, ModeKind, Report, TableChange } from '../types'
 
@@ -11,6 +12,8 @@ const VIOLET_TINT = '#B138C1'
 const IN_CODE_PATTERN = 'RUN_MIGRATIONS|migrate[.]New|RunMigrations[(]|goose[.]Up[(]'
 const GIT_TIMEOUT_MS = 15_000
 const MAX_SIBLINGS = 60
+// shortcut: replays the latest 400 earlier migrations only; a repo with more misses the oldest tables.
+const MAX_EARLIER = 400
 
 const reportAtom = atom({ plugin: 'deploy-runbook', key: 'report' } as const, null)
 const errorAtom = atom({ plugin: 'deploy-runbook', key: 'error' } as const, null)
@@ -121,6 +124,11 @@ async function analyze($: EngineInterface): Promise<Report> {
     repoFiles = await readAll($, top, [...new Set([...trackedPaths.filter(isDeployFile), ...codePaths])])
     consumers = await consumersOf($, top, repo)
   }
+  const branchMigrations = new Set(migrations)
+  const earlierPaths = inRunOrder(trackedPaths.filter(path => isMigration(path) && !branchMigrations.has(path)).map(path => ({ path, text: '' })))
+    .map(file => file.path)
+    .slice(-MAX_EARLIER)
+  const earlierMigrations = migrations.length > 0 ? await readAll($, top, earlierPaths) : []
   const commits = Number((await git($, top, ['rev-list', '--count', `${mergeBase}..HEAD`])) ?? 0)
   const unpushed = await git($, top, ['rev-list', '--count', '@{u}..HEAD'])
 
@@ -135,6 +143,7 @@ async function analyze($: EngineInterface): Promise<Report> {
     corrections,
     trackedPaths,
     consumers,
+    earlierMigrations,
     info: { commits, files: changed.length, unpushed: unpushed === null ? null : Number(unpushed) },
   })
 }
@@ -220,7 +229,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const ui = $.ui.resolve(e)
+    const { Box, Button, Text } = ui
     const report = await read($, reportAtom)
     const error = await read($, errorAtom)
     const isLoading = await read($, loadingAtom)
@@ -329,7 +339,14 @@ export const register: Register = on => {
         {report.tables.length > 0 && (
           <Box flexDirection="column">
             <Text bold>Table changes</Text>
-            {report.tables.map(table => tableRows(Box, Text, table))}
+            {e.surface === 'desktop' && 'Svg' in ui
+              ? (() => {
+                  const W = Math.max(280, Math.min(900, (e.props.bodyColumns || 60) * 8 - 24))
+                  const drawn = tablesSvg(W, report.tables)
+                  const { Svg } = ui
+                  return <Svg key="tables" source={drawn.source} alt={`Changed tables: ${report.tables.map(t => t.table).join(', ')}`} width={W} height={drawn.height} />
+                })()
+              : report.tables.map(table => tableRows(Box, Text, table))}
             {report.skipped > 0 && <Text dimColor>{report.skipped} statements not read (indexes, data, functions)</Text>}
           </Box>
         )}

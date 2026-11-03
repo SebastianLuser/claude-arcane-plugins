@@ -16,6 +16,10 @@ export type TableChange = {
   dropped: string[]
   renamed: { from: string; to: string }[]
   foreignKeys: ForeignKey[]
+  /** Columns whose type changes, with the new type; left out when none does. */
+  retyped?: Column[]
+  /** The table's columns before this branch, read from the repo's earlier migrations; null when none created it. */
+  before?: Column[] | null
 }
 
 export type SqlChanges = {

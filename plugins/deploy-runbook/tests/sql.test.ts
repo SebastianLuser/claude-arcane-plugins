@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { migrationRisks, splitStatements, tableChanges } from '../hooks/sql'
+import { migrationRisks, schemaOf, splitStatements, tableChanges } from '../hooks/sql'
+import { tableRows } from '../hooks/svg'
 
 const BILLING_000028 = `CREATE TABLE IF NOT EXISTS organization_courses (
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -204,10 +205,11 @@ describe('tableChanges', () => {
         dropped: ['password_hash'],
         renamed: [{ from: 'name', to: 'first_name' }],
         foreignKeys: [{ column: 'org_id', table: 'orgs' }],
+        retyped: [{ name: 'email', type: 'CITEXT' }],
       },
       { table: 'legacy_sessions', isNew: false, isDropped: true, added: [], dropped: [], renamed: [], foreignKeys: [] },
     ])
-    expect(skipped).toBe(1)
+    expect(skipped).toBe(0)
   })
 })
 
@@ -234,5 +236,38 @@ describe('migrationRisks', () => {
 
   test('should find nothing risky in a plain new table', () => {
     expect(migrationRisks('CREATE TABLE scores (id serial PRIMARY KEY, points int NOT NULL);')).toEqual([])
+  })
+})
+
+describe('table drawing', () => {
+  const EARLIER = [
+    'CREATE TABLE scores (id serial PRIMARY KEY, player text NOT NULL, points int, created_at timestamptz);',
+    'ALTER TABLE scores ADD COLUMN level int; CREATE TABLE tmp (x int); DROP TABLE tmp;',
+  ]
+
+  test('should replay earlier migrations into each table columns', () => {
+    const schema = schemaOf(EARLIER)
+    expect(schema.get('scores')?.map(c => c.name)).toEqual(['id', 'player', 'points', 'created_at', 'level'])
+    expect(schema.has('tmp')).toBe(false)
+  })
+
+  test('should mark each column added, dropped, changed or unchanged against the earlier table', () => {
+    const change = tableChanges(
+      'ALTER TABLE scores ADD COLUMN player_id int REFERENCES players, DROP COLUMN created_at, RENAME COLUMN player TO name, ALTER COLUMN points TYPE bigint;',
+    ).tables[0]!
+    change.before = schemaOf(EARLIER).get('scores')!
+    expect(tableRows(change).map(r => [r.kind, r.name, r.type, r.ref])).toEqual([
+      ['same', 'id', 'serial', null],
+      ['changed', 'player → name', 'text', null],
+      ['changed', 'points', 'int → bigint', null],
+      ['dropped', 'created_at', 'timestamptz', null],
+      ['same', 'level', 'int', null],
+      ['added', 'player_id', 'int', 'players'],
+    ])
+  })
+
+  test('should show the changes only and say so when the earlier table is unknown', () => {
+    const change = tableChanges('ALTER TABLE legacy DROP COLUMN code;').tables[0]!
+    expect(tableRows(change).map(r => r.kind)).toEqual(['dropped', 'note'])
   })
 })

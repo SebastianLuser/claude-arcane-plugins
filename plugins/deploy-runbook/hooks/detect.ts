@@ -1,5 +1,5 @@
 import type { BranchInfo, Consumer, MigrationMode, NewVar, Report, Risk, Step, TableChange } from '../types'
-import { migrationRisks, tableChanges } from './sql'
+import { migrationRisks, schemaOf, tableChanges } from './sql'
 
 export type Corrections = {
   migrations?: Record<string, string>
@@ -21,6 +21,14 @@ export type ReportInput = {
   trackedPaths: string[]
   consumers: Consumer[]
   info: BranchInfo
+  /** The repo's migrations from before this branch, to draw each table as it was. */
+  earlierMigrations?: RepoFile[]
+}
+
+/** Earlier migrations in the order they ran: by file name, which is how the tools number them. */
+export function inRunOrder(files: RepoFile[]): RepoFile[] {
+  const name = (path: string) => path.split('/').pop()!
+  return [...files].sort((a, b) => name(a.path).localeCompare(name(b.path)) || a.path.localeCompare(b.path))
 }
 
 const ENV_FILE = /(^|\/)\.env(\.[^/]+)?$/i
@@ -181,10 +189,15 @@ export function buildReport(input: ReportInput): Report {
               dropped: [...known.dropped, ...change.dropped],
               renamed: [...known.renamed, ...change.renamed],
               foreignKeys: [...known.foreignKeys, ...change.foreignKeys],
+              ...(known.retyped || change.retyped ? { retyped: [...(known.retyped ?? []), ...(change.retyped ?? [])] } : {}),
             }
           : change,
       )
     }
+  }
+  if (input.earlierMigrations) {
+    const before = schemaOf(inRunOrder(input.earlierMigrations).map(file => file.text))
+    for (const table of tables.values()) table.before = table.isNew ? null : (before.get(table.table) ?? null)
   }
   const vars: NewVar[] = newVars(input.patches).map(found => ({
     ...found,

@@ -146,7 +146,10 @@ export function tableChanges(sql: string): SqlChanges {
         const addColumn = /^ADD\s+(?!CONSTRAINT\b|PRIMARY\b|UNIQUE\b|CHECK\b|EXCLUDE\b|FOREIGN\b)(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?([\s\S]+)$/i.exec(action)
         const dropColumn = /^DROP\s+(?!CONSTRAINT\b)(?:COLUMN\s+)?(?:IF\s+EXISTS\s+)?("[^"]+"|\w+)/i.exec(action)
         const rename = /^RENAME\s+(?:COLUMN\s+)?("[^"]+"|\w+)\s+TO\s+("[^"]+"|\w+)$/i.exec(action)
-        if (fks.length > 0) {
+        const retype = /^ALTER\s+(?:COLUMN\s+)?("[^"]+"|\w+)\s+(?:SET\s+DATA\s+)?TYPE\s+(.+?)(?:\s+USING\b[\s\S]*)?$/i.exec(action)
+        if (retype) {
+          table.retyped = [...(table.retyped ?? []), { name: unquote(retype[1]!), type: retype[2]!.trim() }]
+        } else if (fks.length > 0) {
           table.foreignKeys.push(...fks)
         } else if (addColumn && parseColumn(addColumn[1]!)) {
           const parsed = parseColumn(addColumn[1]!)!
@@ -173,7 +176,7 @@ export function tableChanges(sql: string): SqlChanges {
   }
 
   const changed = [...tables.values()].filter(
-    table => table.isNew || table.isDropped || table.added.length + table.dropped.length + table.renamed.length + table.foreignKeys.length > 0,
+    table => table.isNew || table.isDropped || table.added.length + table.dropped.length + table.renamed.length + table.foreignKeys.length + (table.retyped?.length ?? 0) > 0,
   )
   return { tables: changed, skipped }
 }
@@ -213,4 +216,27 @@ export function migrationRisks(sql: string): { level: RiskLevel; text: string }[
     }
   }
   return risks.sort((a, b) => Number(b.level === 'high') - Number(a.level === 'high'))
+}
+
+/**
+ * Replays migrations in order and returns each table's columns at the end.
+ * shortcut: reads CREATE/ALTER/DROP TABLE only; a table built by a function or a DO block is missed.
+ */
+export function schemaOf(sqls: string[]): Map<string, Column[]> {
+  const schema = new Map<string, Column[]>()
+  for (const sql of sqls) {
+    for (const change of tableChanges(sql).tables) {
+      if (change.isDropped) {
+        schema.delete(change.table)
+        continue
+      }
+      let columns = change.isNew ? [] : (schema.get(change.table) ?? [])
+      columns = columns.filter(c => !change.dropped.includes(c.name))
+      for (const r of change.renamed) columns = columns.map(c => (c.name === r.from ? { ...c, name: r.to } : c))
+      for (const t of change.retyped ?? []) columns = columns.map(c => (c.name === t.name ? { ...c, type: t.type } : c))
+      columns = [...columns.filter(c => !change.added.some(a => a.name === c.name)), ...change.added]
+      if (change.isNew || schema.has(change.table)) schema.set(change.table, columns)
+    }
+  }
+  return schema
 }
