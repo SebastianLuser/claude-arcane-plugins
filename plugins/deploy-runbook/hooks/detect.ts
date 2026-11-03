@@ -1,5 +1,5 @@
-import type { MigrationMode, NewVar, Report, TableChange } from '../types'
-import { tableChanges } from './sql'
+import type { BranchInfo, Consumer, MigrationMode, NewVar, Report, Risk, Step, TableChange } from '../types'
+import { migrationRisks, tableChanges } from './sql'
 
 export type Corrections = {
   migrations?: Record<string, string>
@@ -17,6 +17,10 @@ export type ReportInput = {
   migrationTexts: RepoFile[]
   repoFiles: RepoFile[]
   corrections: Corrections
+  /** Every tracked path, to find each migration's down file. */
+  trackedPaths: string[]
+  consumers: Consumer[]
+  info: BranchInfo
 }
 
 const ENV_FILE = /(^|\/)\.env(\.[^/]+)?$/i
@@ -186,6 +190,18 @@ export function buildReport(input: ReportInput): Report {
     ...found,
     target: loadTarget(found.name, input.repo, input.repoFiles, input.corrections),
   }))
+  const tracked = new Set(input.trackedPaths)
+  const risks: Risk[] = input.migrationTexts
+    .filter(({ path }) => isMigration(path))
+    .flatMap(({ path, text }) => {
+      const file = path.split('/').pop()!
+      const found: Risk[] = migrationRisks(text).map(risk => ({ ...risk, file }))
+      if (!tracked.has(downPath(path)) && !IN_FILE_DOWN.test(text)) {
+        found.push({ file, level: 'medium', text: 'No down migration: rolling back needs a fix by hand' })
+      }
+      return found
+    })
+    .sort((a, b) => Number(b.level === 'high') - Number(a.level === 'high'))
   return {
     repo: input.repo,
     branch: input.branch,
@@ -195,5 +211,48 @@ export function buildReport(input: ReportInput): Report {
     vars,
     tables: [...tables.values()],
     skipped,
+    risks,
+    consumers: migrations.length > 0 ? input.consumers : input.consumers.filter(c => c.kind === 'http'),
+    info: input.info,
   }
+}
+
+// goose and dbmate keep the down part inside the same file.
+const IN_FILE_DOWN = /\+goose\s+Down|migrate:down/i
+
+function downPath(path: string): string {
+  return /\.up\.sql$/i.test(path) ? path.replace(/\.up\.sql$/i, '.down.sql') : path.replace(/\.sql$/i, '.down.sql')
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/** The runbook in the order it is done: push, back up, variables, migrations, deploy, then checks. */
+export function deploySteps(report: Report): Step[] {
+  const steps: Step[] = []
+  const { unpushed } = report.info
+  if (unpushed !== 0) {
+    steps.push({ id: 'push', text: `Push ${report.branch}`, detail: unpushed === null ? 'it has no upstream yet' : `${plural(unpushed, 'commit')} not pushed` })
+  }
+  if (report.risks.some(risk => risk.level === 'high')) {
+    steps.push({ id: 'backup', text: 'Back up the tables the migrations touch', detail: 'a migration drops or rewrites data' })
+  }
+  for (const found of report.vars) {
+    steps.push({ id: `var:${found.name}`, text: `Load ${found.name}${found.target ? ` in ${found.target}` : ''}`, detail: found.target ? null : 'where is not detected' })
+  }
+  const mode = report.mode
+  const isByHand = mode?.kind === 'manual' || mode?.kind === 'unknown'
+  const count = plural(report.migrations.length, 'migration')
+  if (mode && isByHand) steps.push({ id: 'migrate', text: `Apply ${count} before deploying`, detail: mode.text })
+  steps.push({ id: 'deploy', text: `Deploy ${report.branch}`, detail: null })
+  if (mode && !isByHand) steps.push({ id: 'migrate', text: `Check the ${count} ran`, detail: mode.text })
+  for (const consumer of report.consumers) {
+    steps.push({
+      id: `check:${consumer.repo}`,
+      text: `Check ${consumer.repo} still works`,
+      detail: consumer.kind === 'db' ? `it reads this database (${consumer.file})` : `it calls this service (${consumer.file})`,
+    })
+  }
+  return steps
 }

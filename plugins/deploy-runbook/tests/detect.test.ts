@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildReport, changedFiles, isDeployFile, isPatchable, loadTarget, migrationMode, newVars } from '../hooks/detect'
+import { buildReport, changedFiles, deploySteps, isDeployFile, isPatchable, loadTarget, migrationMode, newVars } from '../hooks/detect'
 import type { RepoFile } from '../hooks/detect'
 
 const INCLUSION: RepoFile[] = [
@@ -204,6 +204,9 @@ describe('buildReport', () => {
       migrationTexts: [{ path: 'packages/dbconn/migrations/000030_add_slug.up.sql', text: 'ALTER TABLE courses ADD COLUMN slug TEXT;' }],
       repoFiles: BILLING,
       corrections: {},
+      trackedPaths: ['packages/dbconn/migrations/000030_add_slug.down.sql'],
+      consumers: [{ repo: 'reports-web', kind: 'db', file: '.env.example' }],
+      info: { commits: 2, files: 3, unpushed: 0 },
     })
 
     expect(report).toEqual({
@@ -225,6 +228,9 @@ describe('buildReport', () => {
         },
       ],
       skipped: 0,
+      risks: [],
+      consumers: [{ repo: 'reports-web', kind: 'db', file: '.env.example' }],
+      info: { commits: 2, files: 3, unpushed: 0 },
     })
   })
 
@@ -238,8 +244,15 @@ describe('buildReport', () => {
       migrationTexts: [],
       repoFiles: BILLING,
       corrections: {},
+      trackedPaths: [],
+      consumers: [
+        { repo: 'reports-web', kind: 'db', file: '.env.example' },
+        { repo: 'admin-web', kind: 'http', file: 'src/api.ts' },
+      ],
+      info: { commits: 1, files: 1, unpushed: 0 },
     })
 
+    expect(report.consumers).toEqual([{ repo: 'admin-web', kind: 'http', file: 'src/api.ts' }])
     expect(report.mode).toBeNull()
     expect(report.migrations).toEqual([])
   })
@@ -250,4 +263,58 @@ test('should skip deleted files and keep the new path when it reads git name-sta
     { status: 'A', path: 'a.sql' },
     { status: 'M', path: 'src/c.ts' },
   ])
+})
+
+describe('risks and steps', () => {
+  const input = (sql: string, extra: Partial<Parameters<typeof buildReport>[0]> = {}) =>
+    buildReport({
+      repo: 'snake-game',
+      branch: 'feat/scores',
+      base: 'origin/main',
+      nameStatus: 'A\tmigrations/001_scores.sql\nM\t.env.example',
+      patches: [{ path: '.env.example', text: '+LEADERBOARD_API_URL=http://localhost' }],
+      migrationTexts: [{ path: 'migrations/001_scores.sql', text: sql }],
+      repoFiles: [],
+      corrections: {},
+      trackedPaths: [],
+      consumers: [{ repo: 'snake-leaderboard', kind: 'db', file: '.env.example' }],
+      info: { commits: 1, files: 2, unpushed: null },
+      ...extra,
+    })
+
+  test('should flag a migration with no down file and no down part inside it', () => {
+    expect(input('CREATE TABLE scores (id int);').risks).toEqual([
+      { file: '001_scores.sql', level: 'medium', text: 'No down migration: rolling back needs a fix by hand' },
+    ])
+    expect(input('-- +goose Up\nCREATE TABLE scores (id int);\n-- +goose Down\nDROP TABLE scores;').risks.map(r => r.text)).toEqual([
+      'Drops table scores: its data is lost',
+    ])
+    expect(input('CREATE TABLE scores (id int);', { trackedPaths: ['migrations/001_scores.down.sql'] }).risks).toEqual([])
+  })
+
+  test('should order the steps push, back up, variables, migrations by hand, deploy, checks', () => {
+    const report = input('ALTER TABLE players DROP COLUMN nickname;')
+    expect(deploySteps(report).map(step => step.id)).toEqual([
+      'push',
+      'backup',
+      'var:LEADERBOARD_API_URL',
+      'migrate',
+      'deploy',
+      'check:snake-leaderboard',
+    ])
+    expect(deploySteps(report)[0]).toEqual({ id: 'push', text: 'Push feat/scores', detail: 'it has no upstream yet' })
+    expect(deploySteps(report)[5]!.detail).toBe('it reads this database (.env.example)')
+  })
+
+  test('should check the migrations after the deploy when they run by themselves', () => {
+    const report = input('CREATE TABLE scores (id int);', {
+      corrections: { migrations: { 'snake-game': 'They run on startup' } },
+      info: { commits: 1, files: 2, unpushed: 0 },
+    })
+    report.mode = { kind: 'auto', text: 'They run on startup', source: null }
+    const ids = deploySteps(report).map(step => step.id)
+    expect(ids.indexOf('deploy')).toBeLessThan(ids.indexOf('migrate'))
+    expect(ids).not.toContain('push')
+    expect(ids).not.toContain('backup')
+  })
 })

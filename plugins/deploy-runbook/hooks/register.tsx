@@ -1,19 +1,21 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildReport, changedFiles, isDeployFile, isMigration, isPatchable, splitPatch } from './detect'
+import { buildReport, changedFiles, deploySteps, isDeployFile, isMigration, isPatchable, splitPatch } from './detect'
 import type { Corrections, RepoFile } from './detect'
-import type { ModeKind, Report, TableChange } from '../types'
+import type { Consumer, ModeKind, Report, TableChange } from '../types'
 
 const PLUGIN = 'deploy-runbook'
 const PANE = 'deploy-runbook'
 const VIOLET_TINT = '#B138C1'
 const IN_CODE_PATTERN = 'RUN_MIGRATIONS|migrate[.]New|RunMigrations[(]|goose[.]Up[(]'
 const GIT_TIMEOUT_MS = 15_000
+const MAX_SIBLINGS = 60
 
 const reportAtom = atom({ plugin: 'deploy-runbook', key: 'report' } as const, null)
 const errorAtom = atom({ plugin: 'deploy-runbook', key: 'error' } as const, null)
 const loadingAtom = atom({ plugin: 'deploy-runbook', key: 'isLoading' } as const, false)
+const doneAtom = atom({ plugin: 'deploy-runbook', key: 'done' } as const, [])
 
 const MODE_COLOR: Record<ModeKind, string | undefined> = {
   auto: undefined,
@@ -69,6 +71,25 @@ async function readAll($: EngineInterface, top: string, paths: string[]): Promis
   return files.filter(file => file !== null)
 }
 
+// shortcut: matches the whole repo name as a variable prefix (snake-game → SNAKE_GAME_DATABASE_URL); service-impact's fuzzier matching would find more.
+async function consumersOf($: EngineInterface, top: string, repo: string): Promise<Consumer[]> {
+  const parent = top.slice(0, top.lastIndexOf('/'))
+  const token = repo.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
+  const entries = (await $.fs.list(parent).catch(() => [])).filter(entry => entry.kind === 'dir' && entry.name !== repo)
+  const found = await Promise.all(
+    entries.slice(0, MAX_SIBLINGS).map(async (entry): Promise<Consumer | null> => {
+      const dir = `${parent}/${entry.name}`
+      if (!(await $.fs.exists(`${dir}/.git`).catch(() => false))) return null
+      // -l lists file names only: a tracked .env never has its values read.
+      const db = await git($, dir, ['grep', '-l', '-E', `${token}_(DATABASE|DB)_URL`])
+      const http = db ? null : await git($, dir, ['grep', '-l', '-E', `${token}_(API_|BASE_)*URL`])
+      const file = (db ?? http)?.split('\n')[0]
+      return file ? { repo: entry.name, kind: db ? 'db' : 'http', file } : null
+    }),
+  )
+  return found.filter(consumer => consumer !== null)
+}
+
 let corrections: Corrections = {}
 let inflight: Promise<Report | null> | null = null
 
@@ -90,15 +111,21 @@ async function analyze($: EngineInterface): Promise<Report> {
   const diff = patchable.length > 0 ? await git($, top, ['diff', '-U0', '--no-renames', mergeBase, '--', ...patchable]) : null
   const patches = splitPatch(diff ?? '')
 
+  const repo = top.split('/').pop() ?? top
   let repoFiles: RepoFile[] = []
+  let trackedPaths: string[] = []
+  let consumers: Consumer[] = []
   if (migrations.length > 0 || patches.length > 0) {
-    const deployPaths = ((await git($, top, ['ls-files'])) ?? '').split('\n').filter(isDeployFile)
+    trackedPaths = ((await git($, top, ['ls-files'])) ?? '').split('\n').filter(Boolean)
     const codePaths = ((await git($, top, ['grep', '-l', '-E', IN_CODE_PATTERN, '--', '*.go'])) ?? '').split('\n').filter(Boolean)
-    repoFiles = await readAll($, top, [...new Set([...deployPaths, ...codePaths])])
+    repoFiles = await readAll($, top, [...new Set([...trackedPaths.filter(isDeployFile), ...codePaths])])
+    consumers = await consumersOf($, top, repo)
   }
+  const commits = Number((await git($, top, ['rev-list', '--count', `${mergeBase}..HEAD`])) ?? 0)
+  const unpushed = await git($, top, ['rev-list', '--count', '@{u}..HEAD'])
 
   return buildReport({
-    repo: top.split('/').pop() ?? top,
+    repo,
     branch,
     base,
     nameStatus,
@@ -106,6 +133,9 @@ async function analyze($: EngineInterface): Promise<Report> {
     migrationTexts: await readAll($, top, migrations),
     repoFiles,
     corrections,
+    trackedPaths,
+    consumers,
+    info: { commits, files: changed.length, unpushed: unpushed === null ? null : Number(unpushed) },
   })
 }
 
@@ -206,6 +236,13 @@ export const register: Register = on => {
     }
 
     const mode = report.mode
+    const { info } = report
+    const done = new Set(await read($, doneAtom))
+    const steps = hasWork(report) ? deploySteps(report) : []
+    const doneCount = steps.filter(step => done.has(`${report.branch}|${step.id}`)).length
+    const gaps = gapsPrompt(report)
+    const toggle = (key: string) => () =>
+      void update($, doneAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list.filter(k => k.startsWith(`${report.branch}|`)), key]))
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={VIOLET_TINT} paddingX={1} gap={1}>
         <Box flexDirection="column">
@@ -213,8 +250,57 @@ export const register: Register = on => {
           <Text dimColor>
             {report.branch} against {report.base}
           </Text>
+          <Text dimColor>
+            {plural(info.commits, 'commit')} · {plural(info.files, 'file')} changed ·{' '}
+            {info.unpushed === null ? 'not pushed yet' : info.unpushed === 0 ? 'pushed' : `${info.unpushed} not pushed`}
+          </Text>
           {error && <Text color="error">{error}</Text>}
         </Box>
+        {steps.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold>
+              Steps <Text dimColor>{doneCount}/{steps.length}</Text>
+            </Text>
+            {steps.map((step, i) => {
+              const key = `${report.branch}|${step.id}`
+              const isDone = done.has(key)
+              return (
+                <Box key={key} flexDirection="row" gap={1}>
+                  <Button label={isDone ? '☑' : '☐'} onPress={toggle(key)} />
+                  <Box flexDirection="column">
+                    <Text dimColor={isDone}>
+                      {i + 1}. {step.text}
+                    </Text>
+                    {step.detail && <Text dimColor>{step.detail}</Text>}
+                  </Box>
+                </Box>
+              )
+            })}
+          </Box>
+        )}
+        {report.risks.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold>Risks</Text>
+            {report.risks.map(risk => (
+              <Text color={risk.level === 'high' ? 'error' : 'warning'}>
+                ▲ {risk.text} <Text dimColor>· {risk.file}</Text>
+              </Text>
+            ))}
+          </Box>
+        )}
+        {report.consumers.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold>Also affected</Text>
+            {report.consumers.map(consumer => (
+              <Text>
+                ● {consumer.repo}{' '}
+                <Text dimColor>
+                  · {consumer.kind === 'db' ? 'reads this database' : 'calls this service'} · {consumer.file}
+                </Text>
+              </Text>
+            ))}
+          </Box>
+        )}
         <Box flexDirection="column">
           <Text bold>Migrations</Text>
           {!mode && <Text dimColor>No new migrations.</Text>}
@@ -247,10 +333,27 @@ export const register: Register = on => {
             {report.skipped > 0 && <Text dimColor>{report.skipped} statements not read (indexes, data, functions)</Text>}
           </Box>
         )}
-        {refreshButton}
+        <Box flexDirection="row" gap={1}>
+          {refreshButton}
+          {gaps && <Button key="ask" label="Ask Claude to fill the gaps" onPress={() => void $.prompt.submit({ text: gaps, asUser: true })} />}
+        </Box>
       </Box>
     )
   })
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/** What the runbook could not detect, asked of Claude; null when nothing is missing. */
+function gapsPrompt(report: Report): string | null {
+  const asks: string[] = []
+  if (report.mode?.kind === 'unknown') asks.push(`how ${report.repo} applies its database migrations on deploy (CI workflow, startup code, scripts or docs)`)
+  const unplaced = report.vars.filter(found => !found.target).map(found => found.name)
+  if (unplaced.length > 0) asks.push(`where ${report.repo} loads ${unplaced.join(', ')} in each environment`)
+  if (asks.length === 0) return null
+  return `Find out ${asks.join(', and ')}. Look in the repo first and ask me what you cannot find. Then tell me each one in one line.`
 }
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>

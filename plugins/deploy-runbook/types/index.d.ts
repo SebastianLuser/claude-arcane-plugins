@@ -37,6 +37,34 @@ export type NewVar = {
   target: string | null
 }
 
+export type RiskLevel = 'high' | 'medium'
+
+export type Risk = {
+  file: string
+  level: RiskLevel
+  text: string
+}
+
+/** Another repo next to this one that reads its database or calls it. */
+export type Consumer = {
+  repo: string
+  kind: 'db' | 'http'
+  file: string
+}
+
+export type BranchInfo = {
+  commits: number
+  files: number
+  /** Commits not on the upstream yet; null when the branch has no upstream. */
+  unpushed: number | null
+}
+
+export type Step = {
+  id: string
+  text: string
+  detail: string | null
+}
+
 export type Report = {
   repo: string
   branch: string
@@ -46,6 +74,9 @@ export type Report = {
   vars: NewVar[]
   tables: TableChange[]
   skipped: number
+  risks: Risk[]
+  consumers: Consumer[]
+  info: BranchInfo
 }
 
 declare module 'claude-code' {
@@ -54,6 +85,8 @@ declare module 'claude-code' {
       report: Report | null
       error: string | null
       isLoading: boolean
+      /** Checked steps, as `<branch>|<step id>`. */
+      done: string[]
     }
   }
 }

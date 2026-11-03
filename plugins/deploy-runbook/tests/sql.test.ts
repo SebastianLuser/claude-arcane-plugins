@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { splitStatements, tableChanges } from '../hooks/sql'
+import { migrationRisks, splitStatements, tableChanges } from '../hooks/sql'
 
 const BILLING_000028 = `CREATE TABLE IF NOT EXISTS organization_courses (
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -208,5 +208,31 @@ describe('tableChanges', () => {
       { table: 'legacy_sessions', isNew: false, isDropped: true, added: [], dropped: [], renamed: [], foreignKeys: [] },
     ])
     expect(skipped).toBe(1)
+  })
+})
+
+describe('migrationRisks', () => {
+  test('should rank data loss above locks and say which table and column', () => {
+    const sql = [
+      'CREATE INDEX idx_scores_points ON scores (points);',
+      'ALTER TABLE scores DROP COLUMN legacy, ALTER COLUMN points TYPE bigint, RENAME COLUMN player TO name;',
+      'ALTER TABLE players ADD COLUMN email text NOT NULL;',
+      "ALTER TABLE players ADD COLUMN country text NOT NULL DEFAULT 'AR';",
+      'DELETE FROM sessions;',
+      'DELETE FROM sessions WHERE expired;',
+      'CREATE INDEX CONCURRENTLY idx_ok ON scores (player);',
+    ].join('\n')
+    expect(migrationRisks(sql)).toEqual([
+      { level: 'high', text: 'Drops column scores.legacy: its data is lost' },
+      { level: 'high', text: 'Changes the type of scores.points: rewrites and locks the table' },
+      { level: 'high', text: 'Adds players.email NOT NULL without a default: fails if players has rows' },
+      { level: 'high', text: 'DELETE on every row of sessions (no WHERE)' },
+      { level: 'medium', text: 'Index on scores without CONCURRENTLY: blocks writes while it builds' },
+      { level: 'medium', text: 'Renames scores.player to name: code using the old name breaks' },
+    ])
+  })
+
+  test('should find nothing risky in a plain new table', () => {
+    expect(migrationRisks('CREATE TABLE scores (id serial PRIMARY KEY, points int NOT NULL);')).toEqual([])
   })
 })

@@ -116,8 +116,8 @@ test('should open the runbook with migrations, variables and table changes when 
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ type: 'Text', text: /^DEPLOY/ }))?.text).toBe('DEPLOY · billing-api')
     expect((await ui.find({ type: 'Text', text: /against/ }))?.text).toBe('feat/slug against origin/main')
-    expect((await ui.find({ type: 'Text', text: /RUN_MIGRATIONS/ }))?.text).toBe('● They run on startup; RUN_MIGRATIONS=false turns them off')
-    expect((await ui.find({ type: 'Text', text: /SLUG_BASE_URL/ }))?.text).toContain('load it in Railway')
+    expect((await ui.find({ type: 'Text', text: /^● They run/ }))?.text).toBe('● They run on startup; RUN_MIGRATIONS=false turns them off')
+    expect((await ui.find({ type: 'Text', text: /^● SLUG_BASE_URL/ }))?.text).toContain('load it in Railway')
     expect((await ui.find({ type: 'Text', text: /\+ slug/ }))?.props.color).toBe('success')
     expect((await ui.find({ type: 'Text', text: /- legacy_code/ }))?.props.color).toBe('error')
     await ui.unmount()
@@ -180,8 +180,8 @@ test('should use corrections.json from the plugin folder when the session starts
   await $.command.run(deployInfo())
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /data team/ }))?.text).toBe('● The data team runs them')
-  expect((await ui.find({ type: 'Text', text: /SLUG_BASE_URL/ }))?.text).toContain('load it in Railway (api-prod)')
+  expect((await ui.find({ type: 'Text', text: /^● The data team/ }))?.text).toBe('● The data team runs them')
+  expect((await ui.find({ type: 'Text', text: /^● SLUG_BASE_URL/ }))?.text).toContain('load it in Railway (api-prod)')
   await ui.unmount()
 })
 
@@ -229,4 +229,20 @@ test('should not open the runbook on git push when the branch has nothing to dep
 
   await $.tool.call({ tool: 'Bash', command: 'git push' })
   expect(calls.opened).toEqual([])
+})
+
+test('should list the deploy steps in order and the risks of the migration when the branch has them', async ($, on) => {
+  standInEngine(on, { ...SLUG_BRANCH, 'rev-list --count abc123..HEAD': '3', 'rev-list --count @{u}..HEAD': '1' })
+  await $.session.start({ cwd: REPO, surface: 'desktop', isInteractive: true })
+
+  await $.command.run(deployInfo())
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /changed/ }))?.text).toBe('3 commits · 3 files changed · 1 not pushed')
+  expect((await ui.find({ type: 'Text', text: /^1\. / }))?.text).toBe('1. Push feat/slug')
+  expect((await ui.find({ type: 'Text', text: /^2\. / }))?.text).toBe('2. Back up the tables the migrations touch')
+  expect((await ui.find({ type: 'Text', text: /^4\. / }))?.text).toBe('4. Deploy feat/slug')
+  expect((await ui.find({ type: 'Text', text: /legacy_code: its data/ }))?.props.color).toBe('error')
+  expect(await ui.find({ type: 'Button', key: 'ask' })).toBeUndefined()
+  await ui.unmount()
 })

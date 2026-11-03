@@ -1,4 +1,4 @@
-import type { Column, SqlChanges, TableChange } from '../types'
+import type { Column, RiskLevel, SqlChanges, TableChange } from '../types'
 
 const NAME = String.raw`[\w."]+`
 const CREATE_TABLE = new RegExp(
@@ -176,4 +176,41 @@ export function tableChanges(sql: string): SqlChanges {
     table => table.isNew || table.isDropped || table.added.length + table.dropped.length + table.renamed.length + table.foreignKeys.length > 0,
   )
   return { tables: changed, skipped }
+}
+
+const RISKS: { pattern: RegExp; level: RiskLevel; text: (m: RegExpExecArray) => string }[] = [
+  { pattern: /^DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([\w."]+)/i, level: 'high', text: m => `Drops table ${unquote(m[1]!)}: its data is lost` },
+  { pattern: /^TRUNCATE\s+(?:TABLE\s+)?([\w."]+)/i, level: 'high', text: m => `Empties table ${unquote(m[1]!)}` },
+  { pattern: /^(DELETE\s+FROM|UPDATE)\s+([\w."]+)(?![\s\S]*\bWHERE\b)/i, level: 'high', text: m => `${m[1]!.split(/\s/)[0]!.toUpperCase()} on every row of ${unquote(m[2]!)} (no WHERE)` },
+  { pattern: /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?!CONCURRENTLY\b)(?:IF\s+NOT\s+EXISTS\s+)?(?:[\w."]+\s+)?ON\s+(?:ONLY\s+)?([\w."]+)/i, level: 'medium', text: m => `Index on ${unquote(m[1]!)} without CONCURRENTLY: blocks writes while it builds` },
+  { pattern: /^ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?([\w."]+)\s+RENAME\s+TO\s+([\w."]+)/i, level: 'medium', text: m => `Renames table ${unquote(m[1]!)} to ${unquote(m[2]!)}: code using the old name breaks` },
+]
+
+const ALTER_RISKS: { pattern: RegExp; level: RiskLevel; text: (table: string, m: RegExpExecArray) => string }[] = [
+  { pattern: /^DROP\s+(?!CONSTRAINT\b)(?:COLUMN\s+)?(?:IF\s+EXISTS\s+)?("[^"]+"|\w+)/i, level: 'high', text: (t, m) => `Drops column ${t}.${unquote(m[1]!)}: its data is lost` },
+  { pattern: /^ALTER\s+(?:COLUMN\s+)?("[^"]+"|\w+)\s+(?:SET\s+DATA\s+)?TYPE\b/i, level: 'high', text: (t, m) => `Changes the type of ${t}.${unquote(m[1]!)}: rewrites and locks the table` },
+  { pattern: /^ALTER\s+(?:COLUMN\s+)?("[^"]+"|\w+)\s+SET\s+NOT\s+NULL/i, level: 'medium', text: (t, m) => `Sets ${t}.${unquote(m[1]!)} NOT NULL: fails if a row has it empty` },
+  { pattern: /^ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?("[^"]+"|\w+)\s(?=[\s\S]*\bNOT\s+NULL\b)(?![\s\S]*\bDEFAULT\b)/i, level: 'high', text: (t, m) => `Adds ${t}.${unquote(m[1]!)} NOT NULL without a default: fails if ${t} has rows` },
+  { pattern: /^RENAME\s+(?:COLUMN\s+)?("[^"]+"|\w+)\s+TO\s+("[^"]+"|\w+)$/i, level: 'medium', text: (t, m) => `Renames ${t}.${unquote(m[1]!)} to ${unquote(m[2]!)}: code using the old name breaks` },
+]
+
+/** What in a migration can lose data or lock a table, most severe first. */
+export function migrationRisks(sql: string): { level: RiskLevel; text: string }[] {
+  const risks: { level: RiskLevel; text: string }[] = []
+  for (const statement of splitStatements(sql)) {
+    for (const risk of RISKS) {
+      const m = risk.pattern.exec(statement)
+      if (m) risks.push({ level: risk.level, text: risk.text(m) })
+    }
+    const alter = ALTER_TABLE.exec(statement)
+    if (!alter) continue
+    const table = unquote(alter[1]!)
+    for (const action of splitTopLevel(alter[2]!)) {
+      for (const risk of ALTER_RISKS) {
+        const m = risk.pattern.exec(action)
+        if (m) risks.push({ level: risk.level, text: risk.text(table, m) })
+      }
+    }
+  }
+  return risks.sort((a, b) => Number(b.level === 'high') - Number(a.level === 'high'))
 }
