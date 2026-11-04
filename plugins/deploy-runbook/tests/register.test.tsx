@@ -87,7 +87,7 @@ function standInEngine(
     const stdout = answers[key]
     return { value: { exitCode: stdout === undefined ? 1 : 0, stdout: stdout ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('skill.prompt', (_, e) => ({ text: e.text }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
@@ -108,9 +108,9 @@ test('should open the runbook with migrations, variables and table changes when 
   const calls = standInEngine(on, SLUG_BRANCH)
   await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
 
-  const prompt = await $.skill.prompt({ skill: 'create-pr', text: 'Create a pull request.' })
+  const prompt = await $.prompt.submit({ text: '/create-pr', command: { name: 'create-pr', args: '' } } as never)
 
-  expect(prompt.text).toBe('Create a pull request.')
+  expect(prompt.text).toBe('/create-pr')
   expect(calls.opened).toEqual(['Deploy · billing-api'])
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -135,17 +135,19 @@ test('should not open anything and keep the prompt when /code-review runs on a b
   const calls = standInEngine(on, QUIET_BRANCH)
   await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
 
-  const prompt = await $.skill.prompt({ skill: 'code-review', text: 'Review the diff.' })
+  const prompt = await $.prompt.submit({ text: '/code-review', command: { name: 'code-review', args: '' } } as never)
 
-  expect(prompt.text).toBe('Review the diff.')
+  expect(prompt.text).toBe('/code-review')
   expect(calls.opened).toEqual([])
 })
 
 test('should not run git when another skill expands its prompt', async ($, on) => {
   const calls = standInEngine(on, SLUG_BRANCH)
+  on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
 
-  await $.skill.prompt({ skill: 'commit', text: 'Commit.' })
+  await $.prompt.submit({ text: '/commit', command: { name: 'commit', args: '' } } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'commit' } as never)
 
   expect(calls.git).toEqual([])
   expect(calls.opened).toEqual([])
@@ -194,9 +196,10 @@ test('should use corrections.json from the plugin folder when the session starts
 
 test('should never read nor diff a real .env when the branch changes one', async ($, on) => {
   const calls = standInEngine(on, SLUG_BRANCH)
+  on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
 
-  await $.skill.prompt({ skill: 'create-pr', text: 'Create a pull request.' })
+  await $.tool.call({ tool: 'Skill', skill: 'engineering:create-pr' } as never)
 
   expect(calls.git.filter(key => /(^| )\.env($| )/.test(key))).toEqual([])
   expect(calls.reads.filter(path => /\/\.env$/.test(path))).toEqual([])

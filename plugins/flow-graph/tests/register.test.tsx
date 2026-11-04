@@ -32,7 +32,6 @@ function standInEngine(on: On, now = 0): string[] {
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
-  on('skill.prompt', (_, e) => ({ text: e.text }))
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
@@ -139,7 +138,7 @@ test('should open the pane on round 1 as soon as /loop starts', async ($, on) =>
   const opened = standInEngine(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
-  await $.skill.prompt({ skill: 'loop', text: 'Run the loop.' })
+  await $.prompt.submit({ text: '/loop check CI', command: { name: 'loop', args: 'check CI' }, origin: { kind: 'composer' } } as never)
 
   expect(opened).toEqual(['flow-graph'])
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -257,8 +256,9 @@ test('should list subagents outside a workflow with their type, and the skills a
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
   await $.agent.spawn({ tool_use_id: 'toolu_a', prompt: 'secret prompt', description: 'Count plugins', subagentType: 'Explore' } as never)
-  await $.skill.prompt({ skill: 'workflow-authoring', text: 'x' } as never)
-  await $.skill.prompt({ skill: 'workflow-authoring', text: 'x' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'workflow-authoring' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'plugin:workflow-authoring' } as never)
+  await $.prompt.submit({ text: '/clear', command: { name: 'clear', args: '' }, origin: { kind: 'composer' } } as never)
   await $.tool.call({ tool: 'mcp__github__get_pr' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })

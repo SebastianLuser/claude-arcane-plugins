@@ -1,6 +1,6 @@
 {
   "name": "flow-graph",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Live graph of workflows and loops: the agents each workflow runs, the skills and MCP servers they call, and the stage a loop is in.",
   "author": { "name": "sebas" },
   "types": "./types/index.d.ts"

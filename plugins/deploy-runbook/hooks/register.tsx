@@ -189,6 +189,13 @@ async function autoOpen($: EngineInterface, isShipping: boolean): Promise<void> 
   await openPane($, report)
 }
 
+const REVIEW_SKILLS = new Set(['create-pr', 'code-review'])
+
+async function showRunbook($: EngineInterface): Promise<void> {
+  const report = await refresh($)
+  if (report && hasWork(report)) await openPane($, report).catch(() => undefined)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     corrections = await loadCorrections($)
@@ -196,12 +203,22 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('skill.prompt', { skill: ['create-pr', 'code-review'] }, async ($, e, next) => {
-    const prompt = await next(e)
-    const report = await refresh($)
-    if (report && hasWork(report)) await openPane($, report).catch(() => undefined)
-    return prompt
-  })
+  // Seen at the slash line and the Skill tool, not at skill.prompt: on Team and Enterprise plans the
+  // built-in guard (cc-plugin-sec-default) skips skill.prompt hooks of user-installed mods.
+  on('prompt.submit', async ($, e, next) => {
+    const sent = await next(e)
+    if (e.command && REVIEW_SKILLS.has(e.command.name)) await showRunbook($)
+    return sent
+  }).catch(($, e, next) => next(e))
+
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
+    const ran = await next(e)
+    const skill = (e as unknown as { skill?: unknown }).skill
+    if (ran.deny === undefined && !e.agentId && typeof skill === 'string' && REVIEW_SKILLS.has(skill.split(':').pop() ?? '')) {
+      await showRunbook($)
+    }
+    return ran
+  }).catch(($, e, next) => next(e))
 
   for (const tool of ['Edit', 'Write'] as const) {
     on('tool.call', { tool }, async ($, e, next) => {

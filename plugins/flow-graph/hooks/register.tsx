@@ -43,6 +43,18 @@ async function openPane($: EngineInterface): Promise<void> {
   await $.ui.open({ id: PANE, title: 'Flows' })
 }
 
+// Skills are seen at the Skill tool and the slash line, not at skill.prompt: on Team and Enterprise
+// plans the built-in guard (cc-plugin-sec-default) skips skill.prompt hooks of user-installed mods.
+async function sawSkill($: EngineInterface, skill: string): Promise<void> {
+  const name = skill.split(':').pop() ?? skill
+  await change($, flow => noteSession(flow, 'skill', name))
+  if (name !== 'loop') return
+  const isNew = !isLive((await read($, flowAtom)).loop)
+  const now = await $.clock.now()
+  await change($, flow => loopBegin(flow, now))
+  if (isNew) await openPane($)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'flow', description: 'Live graph of workflows and loops' })
@@ -63,6 +75,8 @@ export const register: Register = on => {
     if (e.agentId) {
       const agentId = e.agentId
       await change($, flow => (hasAgent(flow, agentId) ? noteTool(flow, agentId, classifyTool(e.tool, args.skill)) : flow))
+    } else if (e.tool === 'Skill' && typeof args.skill === 'string') {
+      await sawSkill($, args.skill)
     } else if (e.tool.startsWith('mcp__')) {
       const tool = classifyTool(e.tool, null)
       await change($, flow => noteSession(flow, 'mcp', tool.name))
@@ -81,23 +95,6 @@ export const register: Register = on => {
       if (isNew) await openPane($)
     }
     return ran
-  }).catch(($, e, next) => next(e))
-
-  // `/loop` shows its first round as soon as it starts, before it schedules the next one.
-  on('skill.prompt', { skill: 'loop' }, async ($, e, next) => {
-    const prompt = await next(e)
-    const isNew = !isLive((await read($, flowAtom)).loop)
-    const now = await $.clock.now()
-    await change($, flow => loopBegin(flow, now))
-    if (isNew) await openPane($)
-    return prompt
-  }).catch(($, e, next) => next(e))
-
-  // Every skill the main session loads, a slash command's or the Skill tool's; an agent's are counted on the agent.
-  on('skill.prompt', async ($, e, next) => {
-    const prompt = await next(e)
-    if (!(e as { agentId?: string }).agentId) await change($, flow => noteSession(flow, 'skill', e.skill))
-    return prompt
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
@@ -151,6 +148,8 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
+    // A slash command counts only as /loop: built-ins like /clear arrive here too and are not skills.
+    if (e.command?.name === 'loop') await sawSkill($, 'loop')
     if (e.origin.kind === 'scheduled-trigger') {
       const now = await $.clock.now()
       await change($, flow => loopWake(flow, now))
