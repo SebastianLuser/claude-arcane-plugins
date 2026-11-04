@@ -49,7 +49,8 @@ function curve(x1: number, y1: number, x2: number, y2: number, color: string, is
 function statusIcon(x: number, y: number, status: Status): string {
   const color = STATUS_COLOR[status]
   if (status === 'running') {
-    return `<circle cx="${x}" cy="${y}" r="7" fill="none" stroke="${color}" stroke-opacity=".25" stroke-width="2.5"/><path class="spin" d="M${x} ${y - 7} A7 7 0 0 1 ${x + 7} ${y}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>`
+    // A whole circle dashed to a quarter: its box is centered on the icon, so it spins in place (a bare arc's box is not).
+    return `<circle cx="${x}" cy="${y}" r="7" fill="none" stroke="${color}" stroke-opacity=".25" stroke-width="2.5"/><circle class="spin" cx="${x}" cy="${y}" r="7" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="11 33"/>`
   }
   if (status === 'ok') {
     return `<circle cx="${x}" cy="${y}" r="8" fill="${color}"/><path d="M${x - 3.5} ${y}l2.5 2.5 4.5-5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
