@@ -42,12 +42,22 @@ export type AgentRun = {
   doing?: string
   /** The crab costume it was given when it started. */
   costume?: string
+  /** The task it was given (the Agent tool's prompt), clipped. */
+  brief?: string
+  /** Its final report, clipped. */
+  answer?: string
+  /** Its latest tool calls, oldest first. */
+  log?: { at: number; what: string }[]
+  /** Every tool call it made. */
+  toolCount?: number
 }
 
 export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
   autoOpenedFor: string
+  /** Agent ids whose detail card is open. */
+  expanded?: string[]
 }
 
 declare module 'claude-code' {

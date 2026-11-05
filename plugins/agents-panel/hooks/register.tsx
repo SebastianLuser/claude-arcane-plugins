@@ -75,6 +75,7 @@ const STRINGS = {
     review: 'Review',
     busy: 'running',
     ctx: 'ctx',
+    details: 'Details', hide: 'Hide', brief: 'Task', activity: 'Activity', answer: 'Report', requests: 'Requests', tools: 'Tool calls', context: 'Context',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
   },
@@ -106,6 +107,7 @@ const STRINGS = {
     review: 'Ревью',
     busy: 'в работе',
     ctx: 'ctx',
+    details: 'Подробнее', hide: 'Скрыть', brief: 'Задача', activity: 'Действия', answer: 'Отчёт', requests: 'Запросы', tools: 'Вызовы', context: 'Контекст',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
   },
@@ -137,6 +139,7 @@ const STRINGS = {
     review: 'בדיקה',
     busy: 'בעבודה',
     ctx: 'הקשר',
+    details: 'פרטים', hide: 'הסתרה', brief: 'משימה', activity: 'פעילות', answer: 'דוח', requests: 'בקשות', tools: 'כלים', context: 'הקשר',
     tier: { light: 'קל', medium: 'בינוני', careful: 'זהיר', heavy: 'כבד', fable: 'פייבל', other: 'אחר' },
     effort: { low: 'נמוך', medium: 'בינוני', high: 'גבוה', xhigh: 'גבוה מאוד', max: 'מקסימלי' },
   },
@@ -497,14 +500,21 @@ const LINE_H = 24
 const GRID_TILE = 4096
 const gridTiles = (H: number) => Array.from({ length: Math.ceil(H / GRID_TILE) }, (_, i) => Math.min(GRID_TILE, H - i * GRID_TILE))
 const gridSvg = (W: number, H: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-<style>.d{fill:#d9d8d4}@media (prefers-color-scheme: dark){.d{fill:#3a3a38}}</style>
+<style>.d{fill:#DDD4C6}@media (prefers-color-scheme: dark){.d{fill:#3A342D}}</style>
 <defs><pattern id="g" width="${GRID_STEP}" height="${GRID_STEP}" patternUnits="userSpaceOnUse"><circle class="d" cx="${GRID_STEP / 2}" cy="${GRID_STEP / 2}" r="1"/></pattern></defs>
 <rect width="${W}" height="${H}" fill="url(#g)"/>
 </svg>`
 
+// The palette and type of the "Mods de Claude" deck: warm paper by day, night and chalk
+// by dark, coral accents, serif titles and spaced mono eyebrows.
+const DISPLAY = "Newsreader,Georgia,'Times New Roman',serif"
+const MONO = "'Geist Mono',ui-monospace,'Cascadia Code',Consolas,monospace"
+const CORAL = '#D97757'
 const PANE_CSS = `<style>
-.t{fill:#1f1f1f}.s{fill:#6b6b68}.m{fill:#9a9a96}.k{fill:#ecebe8}.ln{stroke:#e4e4e1}.tile{fill:#f4f3f0}
-@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}}
+.t{fill:#1E1B18}.s{fill:#5E574F}.m{fill:#8C8378}.k{fill:#ECE5D8}.ln{stroke:#DDD4C6}.tile{fill:#F2EDE4}
+.card{fill:#FBF8F2;stroke:#DDD4C6}.card.on{stroke:${CORAL};fill:#FDF3EC}.cr{fill:${CORAL}}.crs{stroke:${CORAL}}
+@media (prefers-color-scheme: dark){.t{fill:#EDE6DA}.s{fill:#A69C8F}.m{fill:#7A7066}.k{fill:#322C26}.ln{stroke:#3A342D}.tile{fill:#2B2621}
+.card{fill:#24201C;stroke:#3A342D}.card.on{fill:#2B1F19}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
 </style>`
@@ -878,13 +888,13 @@ const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>): stri
   const tw = W // patched: only the time tile
   const top = title ? 28 : 0
   const tile = (i: number, k: string, v: string) =>
-    `<rect class="tile" x="${mx(W, i * (tw + gap), tw)}" y="${top}" width="${tw}" height="40" rx="8"/>
-<text class="s" ${startText(W, i * (tw + gap) + 9, top + 16)} font-family="${FONT}" font-size="11">${k}</text>
-<text class="t" ${startText(W, i * (tw + gap) + 9, top + 33, false)} font-family="${FONT}" font-size="15" font-weight="600" font-variant-numeric="tabular-nums">${v}</text>`
+    `<rect class="card" x="${mx(W, i * (tw + gap), tw) + 0.5}" y="${top + 0.5}" width="${tw - 1}" height="39" rx="10"/>
+${eyebrow(W, i * (tw + gap) + 12, top + 16, k)}
+<text class="t" ${startText(W, i * (tw + gap) + 12, top + 33, false)} font-family="${DISPLAY}" font-size="17" font-variant-numeric="tabular-nums">${v}</text>`
   return svg(
     W,
     headerHeight(title),
-    `${title ? `<text class="t" ${startText(W, 0, 15)} font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(title, 14, W))}</text>` : ''}
+    `${title ? `<text class="t" ${startText(W, 0, 17)} font-family="${DISPLAY}" font-style="italic" font-size="18">${xml(fitText(title, 18, W))}</text>` : ''}
 ${tile(0, s.time, fmtTime(t.time))}`,
   )
 }
@@ -900,13 +910,23 @@ const progressOf = (a: AgentRun): number | null => {
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
+// A spaced mono caption in coral, as the deck's eyebrows; `color` overrides the coral.
+const eyebrow = (W: number, x: number, y: number, label: string, color = '', maxW = 0): string => {
+  const text = label.toUpperCase()
+  return `<text${color ? ` fill="${color}"` : ' class="cr"'} ${startText(W, x, y)} font-family="${MONO}" font-size="9.5" letter-spacing="1.3">${xml(maxW ? fitText(text, 11.5, maxW) : text)}</text>`
+}
+
+const ROW_H = 78
+const PLAN_H = 56
+
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const s = tr()
   const tier = tierOf(a.type)
   const color = colorOf(tier)
   const ctx = ctxOf(a)
-  const textW = W - 42 - 22
-  const meta = [runModel(a)]
+  const X = 52
+  const textW = W - X - 34
+  const meta = [tier === 'other' ? a.type : tierWord(tier), runModel(a)]
   if (a.round > 1) meta.push(`${s.round} ${a.round}`)
   if (a.status === 'failed') meta.push(s.failed)
   const barW = textW
@@ -916,34 +936,138 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
+  const isRunning = a.status === 'running'
   return svg(
     W,
-    66,
-    `${rowCrab(W, 0, 14, costumeOf(a), false, a.status === 'running')}
-<text class="t" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-${steps && stepsW > 30 ? `<text class="t" ${startText(W, 42, 49)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
-<text class="s" ${endText(W, 42 + barW, 49, true)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
-<rect class="k" x="${mx(W, 42, barW)}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${mx(W, 42, fillW)}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
-${statusMark(mx(W, W - 8), 16, a.status, color)}
-<line class="ln" x1="0" y1="65.5" x2="${W}" y2="65.5"/>`,
+    ROW_H,
+    `<rect class="card${isRunning ? ' on' : ''}" x="0.5" y="4.5" width="${W - 1}" height="${ROW_H - 9}" rx="12"/>
+${rowCrab(W, 10, 24, costumeOf(a), false, isRunning)}
+${eyebrow(W, X, 22, meta.join(' · '), tier === 'other' ? '' : color, textW)}
+<text class="t" ${startText(W, X, 41)} font-family="${DISPLAY}" font-size="16">${xml(fitText(a.description || a.type, 15, textW))}</text>
+${steps && stepsW > 30 ? `<text class="s" ${startText(W, X, 57)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
+<text class="s" ${endText(W, X + barW, 57, true)} font-family="${MONO}" font-size="10.5" font-variant-numeric="tabular-nums">${stats}</text>
+<rect class="k" x="${mx(W, X, barW)}" y="63" width="${barW}" height="3" rx="1.5"/><rect${progress === null ? ' class="m"' : ' class="cr"'} x="${mx(W, X, fillW)}" y="63" width="${fillW}" height="3" rx="1.5"/>
+${statusMark(mx(W, W - 16), 20, a.status, CORAL)}`,
   )
+}
+
+// Text broken into lines that fit `maxW`, at most `max` of them, the last cut with an ellipsis.
+const wrapText = (text: string, size: number, maxW: number, max: number): string[] => {
+  const lines: string[] = []
+  const paras = text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[*_`#>]+/g, '')
+    .split(/\n+/)
+    .map(p => p.trim())
+    .filter(Boolean)
+  for (const para of paras) {
+    let line = ''
+    for (const word of para.split(/\s+/)) {
+      const next = line ? `${line} ${word}` : word
+      if (textWidth(next, size) <= maxW) line = next
+      else {
+        if (line) lines.push(line)
+        line = fitText(word, size, maxW)
+      }
+      if (lines.length > max) break
+    }
+    if (line) lines.push(line)
+    if (lines.length > max) break
+  }
+  if (lines.length > max) {
+    lines.length = max
+    lines[max - 1] = fitText(`${lines[max - 1]} …`, size, maxW)
+  }
+  return lines
+}
+
+const MAX_LOG = 40
+const SHOWN_LOG = 8
+
+// The open card under a row: the task it was given, its numbers, what it did and what it reported.
+const detailOf = (W: number, a: AgentRun, at: number): { source: string; height: number } => {
+  const s = tr()
+  const X = 16
+  const inner = W - 2 * X
+  const parts: string[] = []
+  let y = 26
+  const section = (label: string) => {
+    parts.push(eyebrow(W, X, y, label))
+    y += 18
+  }
+  const para = (text: string, max: number) => {
+    for (const line of wrapText(text, 12, inner, max)) {
+      parts.push(`<text class="t" ${startText(W, X, y)} font-family="${FONT}" font-size="12">${xml(line)}</text>`)
+      y += 17
+    }
+    y += 10
+  }
+
+  section(s.brief)
+  para(a.brief || a.description || a.type, 10)
+
+  // Four numbers on small cards; two to a row when the pane is narrow.
+  const stats: [string, string][] = [
+    [s.time, fmtTime(elapsed(a, at))],
+    [s.requests, String(a.steps)],
+    [s.tools, String(a.toolCount ?? a.log?.length ?? 0)],
+    [s.context, `${ctxOf(a)}%`],
+  ]
+  const cols = inner >= 340 ? 4 : 2
+  const gap = 8
+  const tw = (inner - gap * (cols - 1)) / cols
+  stats.forEach(([k, v], i) => {
+    const cx = X + (i % cols) * (tw + gap)
+    const cy = y + Math.floor(i / cols) * (44 + gap)
+    parts.push(`<rect class="tile" x="${mx(W, cx, tw)}" y="${cy}" width="${tw}" height="44" rx="8"/>
+<text class="s" ${startText(W, cx + 10, cy + 16)} font-family="${MONO}" font-size="9" letter-spacing="1">${xml(k.toUpperCase())}</text>
+<text class="t" ${startText(W, cx + 10, cy + 35, false)} font-family="${DISPLAY}" font-size="17" font-variant-numeric="tabular-nums">${xml(v)}</text>`)
+  })
+  y += Math.ceil(stats.length / cols) * (44 + gap) + 14
+
+  const log = (a.log ?? []).slice(-SHOWN_LOG)
+  if (log.length) {
+    section(s.activity)
+    log.forEach((l, i) => {
+      const isLast = i === log.length - 1
+      if (!isLast) parts.push(`<line class="ln" x1="${mx(W, X + 4)}" y1="${y - 1}" x2="${mx(W, X + 4)}" y2="${y + 18}" stroke-width="1.5"/>`)
+      parts.push(`<circle ${isLast && a.status === 'running' ? 'class="cr live"' : 'class="m"'} cx="${mx(W, X + 4)}" cy="${y - 4}" r="3.5"/>
+<text class="m" ${startText(W, X + 16, y, false)} font-family="${MONO}" font-size="10.5" font-variant-numeric="tabular-nums">+${fmtTime(l.at - a.startedAt)}</text>
+<text class="t" ${startText(W, X + 70, y)} font-family="${FONT}" font-size="12">${xml(fitText(l.what, 12, inner - 70))}</text>`)
+      y += 20
+    })
+    y += 10
+  }
+
+  if (a.answer) {
+    section(s.answer)
+    para(a.answer, 10)
+  }
+
+  const height = Math.round(y + 2)
+  return {
+    height,
+    source: svg(W, height, `<rect class="card" x="0.5" y="0.5" width="${W - 1}" height="${height - 5}" rx="12"/>
+<rect class="cr" x="${mx(W, 0.5, 3)}" y="12" width="3" height="${Math.max(0, height - 29)}" rx="1.5"/>
+${parts.join('\n')}`),
+  }
 }
 
 const plannedSvg = (W: number, p: Planned): string => {
   const tier = p.tier in TIER_COLOR ? p.tier : 'other'
   const color = colorOf(tier)
-  const textW = W - 42 - 22
-  const meta = [tierModel(tier)]
+  const X = 52
+  const textW = W - X - 34
+  const meta = [tierWord(tier), tierModel(tier)]
   if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
   return svg(
     W,
-    46,
-    `${rowCrab(W, 0, 6, tier, true)}
-<text class="s" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
-<text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tierWord(tier))}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
-${statusMark(mx(W, W - 8), 16, 'planned', color)}
-<line class="ln" x1="0" y1="45.5" x2="${W}" y2="45.5"/>`,
+    PLAN_H,
+    `<rect class="card" x="0.5" y="3.5" width="${W - 1}" height="${PLAN_H - 7}" rx="12" stroke-dasharray="4 4" fill-opacity=".5"/>
+${rowCrab(W, 10, 14, tier, true)}
+${eyebrow(W, X, 22, meta.filter(Boolean).join(' · '), color, textW)}
+<text class="s" ${startText(W, X, 40)} font-family="${DISPLAY}" font-size="15">${xml(fitText(`${p.n}. ${p.title}`, 14, textW))}</text>
+${statusMark(mx(W, W - 16), 20, 'planned', color)}`,
   )
 }
 
@@ -1128,7 +1252,14 @@ export const register: Register = (on, options) => {
     const agentId = e.agentId
     if (agentId && e.tool !== STEP_TOOL) {
       const doing = doingOf(e.tool, e as unknown as Record<string, unknown>)
-      await update($, agents, list => list.map(a => (a.agentId === agentId ? { ...a, doing } : a)))
+      const at = await $.clock.now()
+      await update($, agents, list =>
+        list.map(a =>
+          a.agentId === agentId
+            ? { ...a, doing, toolCount: (a.toolCount ?? a.log?.length ?? 0) + 1, log: [...(a.log ?? []), { at, what: doing }].slice(-MAX_LOG) }
+            : a,
+        ),
+      )
     }
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -1172,6 +1303,7 @@ export const register: Register = (on, options) => {
         steps: 0,
         round,
         costume: costumeFor(e.subagentType, list),
+        brief: clip(e.prompt.trim(), 4000),
       }
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })
@@ -1232,6 +1364,7 @@ export const register: Register = (on, options) => {
             ...a,
             status: e.reason === 'answer' ? 'done' : 'failed',
             endedAt: at,
+            answer: e.answer.trim() ? clip(e.answer.trim(), 3000) : a.answer,
             ...(fallback && e.usage
               ? {
                   model: e.usage.model || a.model,
@@ -1283,6 +1416,21 @@ export const register: Register = (on, options) => {
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
+    const expanded = new Set(p.expanded ?? [])
+    const toggleDetail = (id: string) =>
+      update($, panel, prev => {
+        const open = prev.expanded ?? []
+        return { ...prev, expanded: open.includes(id) ? open.filter(x => x !== id) : [...open, id].slice(-50) }
+      })
+    const detailButton = (a: AgentRun) => (
+      <Button
+        key={`x-${a.id}`}
+        label={expanded.has(a.id) ? `▾ ${s.hide}` : `${isRtl() ? '◂' : '▸'} ${s.details}`}
+        plain
+        dimColor
+        onPress={() => toggleDetail(a.id)}
+      />
+    )
     const isEmpty = list.length === 0 && planned.length === 0
     const summary = fmtTime(t.time)
 
@@ -1305,9 +1453,19 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
-      const shownDone = p.isDoneCollapsed ? 0 : finished.length
-      const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
-      const gridH = headerHeight(title) + lines * LINE_H + (running.length + shownDone) * 66 + planned.length * 46
+      const shown = [...running, ...(p.isDoneCollapsed ? [] : finished)]
+      const details = new Map(shown.filter(a => expanded.has(a.id)).map(a => [a.id, detailOf(W, a, at)]))
+      const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0) + shown.length
+      const gridH =
+        headerHeight(title) + lines * LINE_H + shown.length * ROW_H + planned.length * PLAN_H + [...details.values()].reduce((h, d) => h + d.height, 0)
+      const agentRow = (a: AgentRun, state: string) => {
+        const d = details.get(a.id)
+        return [
+          <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${state}`} width={W} height={ROW_H} />,
+          d && <Svg key={`d-${a.id}`} source={d.source} alt={`${a.description}: ${a.brief ?? ''}`.slice(0, 500)} width={W} height={d.height} />,
+          detailButton(a),
+        ]
+      }
       return (
         <Box flexDirection="column">
           {/* The grid sizes the pane; the content is placed over it, as an
@@ -1320,17 +1478,13 @@ export const register: Register = (on, options) => {
             {toggleCompact}
             {isEmpty && <Text dimColor>{s.empty}</Text>}
             {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
-            {running.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={66} />
-            ))}
+            {running.map(a => agentRow(a, s.isRunning))}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed &&
-              finished.map(a => (
-                <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={66} />
-              ))}
+              finished.map(a => agentRow(a, s.isFinished))}
             {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
             {planned.map(pl => (
-              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
+              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={PLAN_H} />
             ))}
           </Box>
         </Box>
@@ -1369,6 +1523,30 @@ export const register: Register = (on, options) => {
               {steps}{fmtTime(elapsed(a, at))}
             </Text>
           </Text>
+          {expanded.has(a.id) && (
+            <Box flexDirection="column" marginLeft={2}>
+              <Text color={CORAL}>{s.brief.toUpperCase()}</Text>
+              {wrapText(a.brief || a.description, 1.7, Math.max(20, cols - 4), 10).map((l, i) => (
+                <Text key={`b${i}`}>{l}</Text>
+              ))}
+              <Text dimColor>
+                {s.requests} {a.steps} · {s.tools} {a.toolCount ?? a.log?.length ?? 0} · {s.context} {ctx}%
+              </Text>
+              {(a.log ?? []).length > 0 && <Text color={CORAL}>{s.activity.toUpperCase()}</Text>}
+              {(a.log ?? []).slice(-SHOWN_LOG).map((l, i) => (
+                <Text key={`l${i}`} wrap="truncate-end">
+                  <Text dimColor>+{fmtTime(l.at - a.startedAt)} </Text>
+                  {l.what}
+                </Text>
+              ))}
+              {a.answer && <Text color={CORAL}>{s.answer.toUpperCase()}</Text>}
+              {a.answer &&
+                wrapText(a.answer, 1.7, Math.max(20, cols - 4), 10).map((l, i) => (
+                  <Text key={`a${i}`}>{l}</Text>
+                ))}
+            </Box>
+          )}
+          {detailButton(a)}
         </Box>
       )
     }
