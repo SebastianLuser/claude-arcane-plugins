@@ -39,6 +39,7 @@ import {
   toNodes,
   underAny,
   visibleRows,
+  changedRows,
 } from './tree'
 
 const TREE = { plugin: 'file-tree', key: 'tree' } as const
@@ -86,7 +87,7 @@ let generation = 0
 let lastPress = { key: '', at: 0 }
 let noNerd = false
 let glyphSetting = 'auto'
-const WORDS: Record<string, string> = { up: 'up', cwd: 'cwd', refresh: 'sync', hidden: 'dots', size: 'size', collapse: 'fold', split: 'split', unselect: 'clear' }
+const WORDS: Record<string, string> = { up: 'up', cwd: 'cwd', changes: 'changes', here: 'here', refresh: 'sync', hidden: 'dots', size: 'size', collapse: 'fold', split: 'split', unselect: 'clear' }
 let openWithSetting = ''
 let binariesInDefaultApp = false
 let editWithSetting = ''
@@ -423,7 +424,7 @@ async function reset($: EngineInterface, root: string, focus = false, ready?: Pr
   searchIndex = null
   sizeEpoch += 1
   sizeQueue = []
-  await put($, () => ({ ...emptyTree(root), showHidden: prev.showHidden, column: prev.root ? prev.column : columnDefault, split: prev.split }))
+  await put($, () => ({ ...emptyTree(root), showHidden: prev.showHidden, column: prev.root ? prev.column : columnDefault, split: prev.split, changes: prev.changes, edits: prev.edits }))
   const title = `Files: ${root.split('/').pop() || root}`
   const listed = loadDirs($, [root])
   const repo = detectRepo($)
@@ -960,6 +961,7 @@ async function afterBash($: EngineInterface, jobs: Job[]): Promise<void> {
       ? await changedInRepo($, t.root, since, before, fresh.ignored)
       : { hits: since.os === 'win32' ? [] : await changedSince($, t.root, since, NO_REPO_DEPTH), gone: [] }
     const hits = found.hits.filter(x => inside(t.root, x) && !underAny(x, ignored, t.root) && !isIgnored(t.root, x)).slice(0, FIND_LIMIT)
+    await noteEdits($, hits)
     await revealPaths($, hits)
     const loaded = await get($)
     const dirs = [...new Set([loaded.root, ...openDirs(loaded), ...hits.map(dirname), ...found.gone.map(dirname)])].filter(d => inside(loaded.root, d))
@@ -1027,7 +1029,16 @@ function dropPreviews(paths: string[]): void {
   if (peeked && changed.has(peeked.path)) peeked = null
 }
 
+const MAX_EDITS = 500
+
+/** Remembers the files Claude wrote, for the changes view's "Claude" tag. */
+async function noteEdits($: EngineInterface, paths: string[]): Promise<void> {
+  if (paths.length === 0) return
+  await patch($, cur => ({ edits: [...new Set([...(cur.edits ?? []), ...paths.map(posix)])].slice(-MAX_EDITS) }))
+}
+
 async function touched($: EngineInterface, paths: string[], tone: string, show: boolean): Promise<void> {
+  if (tone !== 'purple') await noteEdits($, paths)
   if (tone !== 'purple') dropPreviews(paths)
   if (tone !== 'purple') markStale($, paths)
   if (await followCwd($)) return
@@ -1842,7 +1853,9 @@ async function pressHeader($: EngineInterface, id: string): Promise<void> {
     await detectRepo($)
     await refreshGit($)
     if (t.query.trim()) await search($, t.query)
-  } else if (id === 'hidden') await patch($, cur => ({ showHidden: !cur.showHidden }))
+  } else if (id === 'changes') await patch($, cur => ({ changes: !cur.changes, scroll: null }))
+  else if (id === 'here') await workHere($, t)
+  else if (id === 'hidden') await patch($, cur => ({ showHidden: !cur.showHidden }))
   else if (id === 'size') await patch($, cur => ({ column: cur.column === 'date' ? 'size' : cur.column === 'size' ? 'loc' : 'date' }))
   else if (id === 'collapse') await patch($, cur => ({ expanded: [], nodes: dropBelow(cur.nodes, cur.nodes.filter(x => x.parent === cur.root && x.kind === 'dir').map(x => x.id)) }))
   else if (id === 'unselect') await patch($, () => ({ selected: '', cursor: '' }))
@@ -1858,6 +1871,35 @@ async function pressHeader($: EngineInterface, id: string): Promise<void> {
     await $.ui.open(mini ? { id: PANE, title, columns: MINI_COLUMNS } : { id: PANE, title }).catch(() => undefined)
     void $.ui.invalidate('ui.render')
   }
+}
+
+/** The folder "work here" acts on: the folder under the cursor or selected (a file's own folder), else the tree's root. */
+export function hereOf(t: Pick<FileTree, 'nodes' | 'cursor' | 'selected' | 'root'>): string {
+  for (const id of [t.cursor, t.selected]) {
+    const n = t.nodes.find(x => x.id === id)
+    if (n?.kind === 'dir') return n.id
+    if (n) return n.parent
+  }
+  return t.root
+}
+
+/**
+ * Re-roots the tree on the folder and asks Claude to move the session there.
+ * A mod cannot change the session's folder itself; Claude can (the desktop app gives it a tool
+ * for it, which asks the person first), and in a terminal it can at least cd there.
+ */
+async function workHere($: EngineInterface, t: FileTree): Promise<void> {
+  const dir = hereOf(t)
+  follow = true
+  await reset($, dir)
+  if (dir === (await cwdOf($))) {
+    $.ui.toast(`The session already works in ${shortPath(dir)}`)
+    return
+  }
+  await $.prompt.submit({
+    text: `Work in ${dir} from now on: move this session's working directory there, then tell me in one line what it is.`,
+    asUser: true,
+  })
 }
 
 async function selectRoot($: EngineInterface): Promise<void> {
@@ -2078,6 +2120,10 @@ export const register: Register = (on, options) => {
       if (to !== t.scroll) await patch($, () => ({ scroll: to }))
       return {}
     }
+    if (typeof data.press === 'string' && t.changes) {
+      await diffFile($, data.press)
+      return {}
+    }
     if (typeof data.press === 'string') {
       const n = t.nodes.find(x => x.id === data.press)
       if (!n) return {}
@@ -2259,7 +2305,10 @@ export const register: Register = (on, options) => {
     const ignored = new Set(t.ignored)
     const untracked = new Set(t.untrackedDirs)
     const width = Math.max(24, e.props.bodyColumns)
-    const rows = visibleRows(t)
+    const edits = new Set(t.edits ?? [])
+    // shortcut: j/k and the arrows still move over the tree's rows, not this list; clicks open the diff. Route navigate() through these rows if keys matter here.
+    const changed = t.changes ? changedRows(t, dirty.root === t.root ? dirty.files : {}, edits) : null
+    const rows = changed ? changed.rows : visibleRows(t)
     const body = e.props.scroll?.bodyRows ?? 40
     const footer = t.nodes.find(n => n.id === t.cursor)?.id ?? (t.selected || '')
     const chrome = 1 + (searchGap ? 2 : 0) + 1 + (t.top ? (t.branch ? 1 : 0) : showHints ? 1 : 0) + (footer || latest || shortcutsShown || shortcutsSetting === 'auto' ? 1 : 0)
@@ -2308,6 +2357,8 @@ export const register: Register = (on, options) => {
       ...(t.selected ? [{ id: 'unselect', label: unicode ? '⊘' : '\u{eabd}', dim: false, hint: 'clear selection' }] : []),
       { id: 'up', label: unicode ? '⬆ back' : '\u{ebff}', dim: false, hint: 'parent folder' },
       { id: 'cwd', label: unicode ? '◎' : '\u{eb06}', dim: !follow, hint: 'follow the cwd' },
+      ...(t.top ? [{ id: 'changes', label: unicode ? '±' : '\u{eb43}', dim: !t.changes, hint: t.changes ? 'show the whole tree' : 'show only the changed files' }] : []),
+      { id: 'here', label: unicode ? '⤵' : '\u{ea7f}', dim: true, hint: `move the session to ${(hereOf(t).split('/').pop() || hereOf(t)).slice(0, 24)}` },
       { id: 'refresh', label: unicode ? '↻' : '\u{eb37}', dim: true, hint: 'reload tree and git' },
       { id: 'hidden', label: unicode ? (t.showHidden ? '⊙' : '○') : t.showHidden ? '\u{f0b95}' : '\u{eae7}', dim: !t.showHidden, hint: t.showHidden ? 'hide hidden files' : 'show hidden files' },
       { id: 'size', label: unicode ? '◫' : '\u{ea90}', dim: t.column === 'date', hint: t.column === 'date' ? 'show sizes' : t.column === 'size' ? 'show lines of code' : 'show dates' },
@@ -2372,7 +2423,7 @@ export const register: Register = (on, options) => {
       const countsText = dirCounts.map(c => c.t).join('')
       const cols = Math.max(4, width - r.depth * 2 - 6 - (meta ? meta.length + 1 : 0) - locText.length - badge.length - countsText.length)
       const name = n.name.length > cols ? n.name.slice(0, cols - 1) + '…' : n.name
-      const caret = n.kind === 'dir' ? (unicode ? (r.open ? '▾' : '▸') : r.open ? CHEVRON_OPEN : CHEVRON_CLOSED) + ' ' : '  '
+      const caret = changed ? '' : n.kind === 'dir' ? (unicode ? (r.open ? '▾' : '▸') : r.open ? CHEVRON_OPEN : CHEVRON_CLOSED) + ' ' : '  '
       const isRepo = n.kind === 'dir' && n.id === t.top
       const glyph = unicode ? emojiIcon(n, r.open, isRepo) : fileIcon(n, r.open, isRepo)
       const lit = isBright || isDim
@@ -2388,15 +2439,22 @@ export const register: Register = (on, options) => {
       if (loc && loc[1] > 0) right.push({ t: ` -${loc[1]}`, c: delColor })
       right.push(...dirCounts)
       if (badge) right.push({ t: badge, c: status ? gitColor : theme.muted, b: true })
+      if (changed && edits.has(n.id)) right.push({ t: ' Claude', c: tones.orange?.solid ?? theme.accent, b: true })
       return { id: n.id, left: clean(left), right: clean(right) }
     }
 
     const note = (text: string): RowSpec => ({ id: '', left: [{ t: text, c: theme.muted }], right: [] })
+    // In the changes view a heading goes above Claude's files and above the rest.
+    const headed = (list: typeof rows): RowSpec[] =>
+      list.flatMap(r => {
+        const head = changed && r.node.id === changed.firstClaude ? [note('Claude, this session')] : changed && r.node.id === changed.firstOther ? [note('Not by Claude this session')] : []
+        return [...head, rowSpec(r)]
+      })
     const specs: RowSpec[] = [
-      ...(rows.length === 0 ? [note('empty')] : []),
+      ...(rows.length === 0 ? [note(changed ? 'no changes against HEAD' : 'empty')] : []),
       ...pinned.map(rowSpec),
       ...(pinned.length > 0 ? [note('  ⋮')] : []),
-      ...shown.map(rowSpec),
+      ...headed(shown),
     ]
     if (nativeScroll) {
       let size = 0

@@ -268,6 +268,34 @@ export function relative(root: string, path: string): string {
   return path === root ? '' : path.slice(root.endsWith('/') ? root.length : root.length + 1)
 }
 
+/**
+ * The changed files as flat rows, named by their path under the root: Claude's edits of this
+ * session first, then the rest, each group by path. `firstClaude` and `firstOther` name the
+ * first row of each group, for its heading.
+ */
+export function changedRows(
+  t: Pick<FileTree, 'root' | 'nodes' | 'showHidden'>,
+  files: Record<string, string>,
+  edits: Set<string>,
+): { rows: Row[]; firstClaude: string; firstOther: string } {
+  const known = new Map(t.nodes.map(n => [n.id, n]))
+  const nodes = Object.keys(files)
+    .filter(id => id.startsWith(`${t.root}/`))
+    .map((id): FileNode => {
+      const name = id.slice(t.root.length + 1)
+      const n = known.get(id)
+      return { id, parent: id.slice(0, id.lastIndexOf('/')), name, kind: 'file', hidden: name.split('/').some(s => s.startsWith('.')), mtime: n?.mtime ?? 0, size: n?.size ?? 0, loaded: true }
+    })
+    .filter(n => t.showHidden || !n.hidden)
+    .sort((a, b) => Number(edits.has(b.id)) - Number(edits.has(a.id)) || collator.compare(a.name, b.name))
+  const rows = nodes.map(node => ({ node, depth: 0, open: false }))
+  return {
+    rows,
+    firstClaude: nodes.find(n => edits.has(n.id))?.id ?? '',
+    firstOther: nodes.some(n => edits.has(n.id)) ? (nodes.find(n => !edits.has(n.id))?.id ?? '') : '',
+  }
+}
+
 export function visibleRows(t: FileTree): Row[] {
   const kids = new Map<string, FileNode[]>()
   for (const n of t.nodes) {

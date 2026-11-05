@@ -54,6 +54,10 @@ export type FileTree = {
   preview: string
   previewTop: number
   split: boolean
+  /** Shows only the changed files, flat, instead of the tree. */
+  changes?: boolean
+  /** Files Claude wrote this session (Edit, Write or a shell command), absolute paths. */
+  edits?: string[]
 }
 
 export type Theme = {
