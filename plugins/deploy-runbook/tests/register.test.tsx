@@ -95,6 +95,13 @@ function standInEngine(
   return calls
 }
 
+/** Everything a mounted pane draws: the Svg sources and the Texts. */
+async function drawn(ui: { findAll: (q: { type: string }) => Promise<{ props: Record<string, unknown> }[]> }): Promise<string> {
+  const svgs = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source))
+  const texts = JSON.stringify(await ui.findAll({ type: 'Text' }), (k, v) => (k === 'parent' ? undefined : v))
+  return svgs.join('') + texts
+}
+
 function deployInfo() {
   return {
     command: 'deploy-info',
@@ -114,19 +121,30 @@ test('should open the runbook with migrations, variables and table changes when 
   expect(calls.opened).toEqual(['Deploy · billing-api'])
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /^DEPLOY/ }))?.text).toBe('DEPLOY · billing-api')
-    expect((await ui.find({ type: 'Text', text: /against/ }))?.text).toBe('feat/slug against origin/main')
-    expect((await ui.find({ type: 'Text', text: /^● They run/ }))?.text).toBe('● They run on startup; RUN_MIGRATIONS=false turns them off')
-    expect((await ui.find({ type: 'Text', text: /^● SLUG_BASE_URL/ }))?.text).toContain('load it in Railway')
     if (surface === 'terminal') {
+      expect((await ui.find({ type: 'Text', text: /^DEPLOY/ }))?.text).toBe('DEPLOY · billing-api')
+      expect((await ui.find({ type: 'Text', text: /against/ }))?.text).toBe('feat/slug against origin/main')
+      expect((await ui.find({ type: 'Text', text: /^● They run/ }))?.text).toBe('● They run on startup; RUN_MIGRATIONS=false turns them off')
+      expect((await ui.find({ type: 'Text', text: /^● SLUG_BASE_URL/ }))?.text).toContain('load it in Railway')
       expect((await ui.find({ type: 'Text', text: /\+ slug/ }))?.props.color).toBe('success')
       expect((await ui.find({ type: 'Text', text: /- legacy_code/ }))?.props.color).toBe('error')
     } else {
-      const svg = String((await ui.find({ type: 'Svg' }))?.props.source ?? '')
+      const svg = await drawn(ui)
+      expect(svg).toContain('DEPLOY · BILLING-API')
+      expect(svg).toContain('feat/slug')
+      expect(svg).toContain('against origin/main')
+      expect(svg).toContain('They run on startup; RUN_MIGRATIONS=false turns them off')
+      expect(svg).toContain('SLUG_BASE_URL')
+      expect(svg).toContain('Drops legacy_code from courses')
       expect(svg).toContain('courses')
-      expect(svg).toContain('slug')
-      expect(svg).toContain('legacy_code')
+      expect(svg).not.toContain('secret-host')
     }
+    // A variable opens to where the code reads it and its command, with no value filled in.
+    // Opened once on the terminal; the open card is kept for the next surface.
+    if (surface === 'terminal') await ui.press({ key: 'vo-SLUG_BASE_URL' })
+    if (surface === 'desktop') expect(await drawn(ui)).toContain('TO LOAD IT')
+    expect((await ui.find({ type: 'Button', key: 'vo-SLUG_BASE_URL' }))?.props.label).toMatch(/^▾/)
+    expect(await drawn(ui)).toContain('SLUG_BASE_URL=...')
     await ui.unmount()
   }
 })
@@ -162,7 +180,7 @@ test('should open the pane and say there is nothing to deploy when /deploy-info 
   expect(result.text).toBe('Nothing to deploy on fix/typo: no new migrations or variables.')
   expect(calls.opened).toEqual(['Deploy · billing-api'])
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /new migrations/ }))?.text).toBe('No new migrations.')
+  expect((await ui.find({ type: 'Text', text: /new migrations/ }))?.text).toBe('No new migrations or variables: nothing to deploy.')
   await ui.unmount()
 })
 
@@ -248,11 +266,16 @@ test('should list the deploy steps in order and the risks of the migration when 
   await $.command.run(deployInfo())
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /changed/ }))?.text).toBe('3 commits · 3 files changed · 1 not pushed')
-  expect((await ui.find({ type: 'Text', text: /^1\. / }))?.text).toBe('1. Push feat/slug')
-  expect((await ui.find({ type: 'Text', text: /^2\. / }))?.text).toBe('2. Back up the tables the migrations touch')
-  expect((await ui.find({ type: 'Text', text: /^4\. / }))?.text).toBe('4. Deploy feat/slug')
-  expect((await ui.find({ type: 'Text', text: /legacy_code: its data/ }))?.props.color).toBe('error')
+  const steps = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.alt))
+  expect(await drawn(ui)).toContain('3 commits · 3 files changed · 1 not pushed')
+  expect(steps.filter(alt => /^\d+\. /.test(alt)).map(alt => alt.replace(/ \(.*\)$/, ''))).toEqual([
+    '1. Push feat/slug',
+    '2. Back up the tables the migrations touch',
+    '3. Load SLUG_BASE_URL in Railway',
+    '4. Deploy feat/slug',
+    '5. Check the 1 migration ran',
+  ])
+  expect(await drawn(ui)).toContain('Drops column courses.legacy_code: its data is lost')
   expect(await ui.find({ type: 'Button', key: 'ask' })).toBeUndefined()
   await ui.unmount()
 })

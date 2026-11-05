@@ -1,14 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { buildReport, changedFiles, deploySteps, inRunOrder, isDeployFile, isMigration, isPatchable, splitPatch } from './detect'
+import { buildReport, changedFiles, deploySteps, inRunOrder, isDeployFile, isMigration, isPatchable, newVars, splitPatch } from './detect'
+import { CORAL, consumersSvg, headerSvg, matrixSvg, migrationSvg, modeSvg, sectionSvg, sqlSvg, stepSvg, varSvg } from './look'
 import { tablesSvg } from './svg'
 import type { Corrections, RepoFile } from './detect'
 import type { Consumer, ModeKind, Report, TableChange } from '../types'
 
 const PLUGIN = 'deploy-runbook'
 const PANE = 'deploy-runbook'
-const VIOLET_TINT = '#B138C1'
 const IN_CODE_PATTERN = 'RUN_MIGRATIONS|migrate[.]New|RunMigrations[(]|goose[.]Up[(]'
 const GIT_TIMEOUT_MS = 15_000
 const MAX_SIBLINGS = 60
@@ -19,6 +19,7 @@ const reportAtom = atom({ plugin: 'deploy-runbook', key: 'report' } as const, nu
 const errorAtom = atom({ plugin: 'deploy-runbook', key: 'error' } as const, null)
 const loadingAtom = atom({ plugin: 'deploy-runbook', key: 'isLoading' } as const, false)
 const doneAtom = atom({ plugin: 'deploy-runbook', key: 'done' } as const, [])
+const openAtom = atom({ plugin: 'deploy-runbook', key: 'open' } as const, [])
 
 const MODE_COLOR: Record<ModeKind, string | undefined> = {
   auto: undefined,
@@ -129,6 +130,16 @@ async function analyze($: EngineInterface): Promise<Report> {
     .map(file => file.path)
     .slice(-MAX_EARLIER)
   const earlierMigrations = migrations.length > 0 ? await readAll($, top, earlierPaths) : []
+  // A variable the branch stops reading in one file may still be read elsewhere: then it is not removed.
+  const dropped = newVars(patches).filter(v => v.status === 'removed').map(v => v.name)
+  const stillUsed = (
+    await Promise.all(
+      dropped.map(async name => {
+        const hits = ((await git($, top, ['grep', '-l', '-w', '-e', name])) ?? '').split('\n').filter(Boolean)
+        return hits.some(path => isPatchable(path) || isDeployFile(path)) ? name : null
+      }),
+    )
+  ).filter(name => name !== null)
   const commits = Number((await git($, top, ['rev-list', '--count', `${mergeBase}..HEAD`])) ?? 0)
   const unpushed = await git($, top, ['rev-list', '--count', '@{u}..HEAD'])
 
@@ -144,7 +155,8 @@ async function analyze($: EngineInterface): Promise<Report> {
     trackedPaths,
     consumers,
     earlierMigrations,
-    info: { commits, files: changed.length, unpushed: unpushed === null ? null : Number(unpushed) },
+    stillUsed,
+    info:{ commits, files: changed.length, unpushed: unpushed === null ? null : Number(unpushed) },
   })
 }
 
@@ -265,15 +277,87 @@ export const register: Register = on => {
     const mode = report.mode
     const { info } = report
     const done = new Set(await read($, doneAtom))
+    const open = new Set(await read($, openAtom))
     const steps = hasWork(report) ? deploySteps(report) : []
     const doneCount = steps.filter(step => done.has(`${report.branch}|${step.id}`)).length
     const gaps = gapsPrompt(report)
     const toggle = (key: string) => () =>
       void update($, doneAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list.filter(k => k.startsWith(`${report.branch}|`)), key]))
+    const flip = (key: string) => () => void update($, openAtom, list => (list.includes(key) ? list.filter(k => k !== key) : [...list, key].slice(-40)))
+    const copy = (key: string, text: string) => (
+      <Button key={key} label="Copy" plain dimColor onPress={press => void $.ui.copy({ text, surface: press.surface })} />
+    )
+    const details = report.details ?? []
+    const risksOf = (path: string) => report.risks.filter(risk => risk.file === path.split('/').pop())
+    const bottom = (
+      <Box flexDirection="row" gap={1}>
+        {refreshButton}
+        {gaps && <Button key="ask" label="Ask Claude to fill the gaps" onPress={() => void $.prompt.submit({ text: gaps, asUser: true })} />}
+      </Box>
+    )
+
+    if (e.surface === 'desktop' && 'Svg' in ui) {
+      const { Svg } = ui
+      const W = Math.max(300, Math.min(900, (e.props.bodyColumns || 60) * 8 - 24))
+      const draw = (key: string, drawn: { source: string; height: number }, alt: string) => (
+        <Svg key={key} source={drawn.source} alt={alt} width={W} height={drawn.height} />
+      )
+      let n = 0
+      const section = (key: string, title: string, note = '') => draw(key, sectionSvg(W, ++n, title, note), title)
+      return (
+        <Box flexDirection="column" gap={1}>
+          {draw('header', headerSvg(W, report), `Deploy ${report.repo}: ${report.branch} against ${report.base}`)}
+          {error && <Text color="error">{error}</Text>}
+          {!hasWork(report) && <Text dimColor>No new migrations or variables: nothing to deploy.</Text>}
+          {steps.length > 0 && section('h-steps', 'Steps', `${doneCount}/${steps.length} done`)}
+          {steps.map((step, i) => {
+            const key = `${report.branch}|${step.id}`
+            const isDone = done.has(key)
+            return (
+              <Box key={key} flexDirection="column">
+                {draw(`s-${step.id}`, stepSvg(W, i, step, isDone), `${i + 1}. ${step.text}${step.detail ? ` (${step.detail})` : ''}`)}
+                <Box flexDirection="row" gap={1}>
+                  <Button key={`d-${step.id}`} label={isDone ? '☑ Done' : '☐ Mark done'} plain dimColor={isDone} onPress={toggle(key)} />
+                  {step.command && !isDone && copy(`c-${step.id}`, step.command)}
+                </Box>
+              </Box>
+            )
+          })}
+          {report.vars.length > 0 && section('h-vars', 'Variables by environment', report.envs?.length ? '' : 'no environments named in the repo')}
+          {report.vars.length > 0 && draw('matrix', matrixSvg(W, report.vars, report.envs ?? []), `Variables: ${report.vars.map(v => v.name).join(', ')}`)}
+          {report.vars.map(v => (
+            <Box key={`v-${v.name}`} flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <Button key={`vo-${v.name}`} label={`${open.has(`var:${v.name}`) ? '▾' : '▸'} ${v.name}`} plain onPress={flip(`var:${v.name}`)} />
+                {v.command && copy(`vc-${v.name}`, v.command)}
+              </Box>
+              {open.has(`var:${v.name}`) && draw(`vd-${v.name}`, varSvg(W, v), `${v.name}: ${v.target ?? 'where not detected'}`)}
+            </Box>
+          ))}
+          {(mode || details.length > 0) && section('h-mig', 'Migrations', `${report.migrations.length} new`)}
+          {mode && draw('mode', modeSvg(W, mode), mode.text)}
+          {mode?.command && <Box flexDirection="row">{copy('c-mode', mode.command)}</Box>}
+          {details.map(m => (
+            <Box key={`m-${m.path}`} flexDirection="column">
+              {draw(`md-${m.path}`, migrationSvg(W, m, risksOf(m.path)), `${m.path}: ${m.summary.join('; ')}`)}
+              <Button key={`mo-${m.path}`} label={`${open.has(`sql:${m.path}`) ? '▾ Hide' : '▸ Show'} the SQL`} plain dimColor onPress={flip(`sql:${m.path}`)} />
+              {open.has(`sql:${m.path}`) && draw(`ms-${m.path}`, sqlSvg(W, m.sql), m.sql.slice(0, 500))}
+            </Box>
+          ))}
+          {report.tables.length > 0 && section('h-tables', 'Tables', report.skipped > 0 ? `${report.skipped} statements not read` : '')}
+          {report.tables.length > 0 && draw('tables', tablesSvg(W, report.tables), `Changed tables: ${report.tables.map(t => t.table).join(', ')}`)}
+          {report.consumers.length > 0 && section('h-also', 'Also affected')}
+          {report.consumers.length > 0 && draw('consumers', consumersSvg(W, report.consumers), report.consumers.map(c => c.repo).join(', '))}
+          {bottom}
+        </Box>
+      )
+    }
+
+    // Terminal: the same, in text.
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={VIOLET_TINT} paddingX={1} gap={1}>
+      <Box flexDirection="column" borderStyle="round" borderColor={CORAL} paddingX={1} gap={1}>
         <Box flexDirection="column">
-          <Text bold>DEPLOY · {report.repo}</Text>
+          <Text bold color={CORAL}>DEPLOY · {report.repo}</Text>
           <Text dimColor>
             {report.branch} against {report.base}
           </Text>
@@ -281,6 +365,7 @@ export const register: Register = on => {
             {plural(info.commits, 'commit')} · {plural(info.files, 'file')} changed ·{' '}
             {info.unpushed === null ? 'not pushed yet' : info.unpushed === 0 ? 'pushed' : `${info.unpushed} not pushed`}
           </Text>
+          {report.envs && report.envs.length > 0 && <Text dimColor>environments: {report.envs.join(', ')}</Text>}
           {error && <Text color="error">{error}</Text>}
         </Box>
         {steps.length > 0 && (
@@ -299,6 +384,7 @@ export const register: Register = on => {
                       {i + 1}. {step.text}
                     </Text>
                     {step.detail && <Text dimColor>{step.detail}</Text>}
+                    {step.command && !isDone && step.command.split('\n').map((line, k) => <Text key={`${step.id}-${k}`} color={CORAL}>$ {line}</Text>)}
                   </Box>
                 </Box>
               )
@@ -337,40 +423,74 @@ export const register: Register = on => {
             </Text>
           )}
           {mode?.source && <Text dimColor>from {mode.source}</Text>}
-          {report.migrations.map(path => (
-            <Text dimColor>· {path.split('/').pop()}</Text>
+          {mode?.command && <Text color={CORAL}>$ {mode.command}</Text>}
+          {details.map(m => (
+            <Box key={`m-${m.path}`} flexDirection="column">
+              <Text>
+                · {m.path.split('/').pop()} <Text dimColor>{m.hasDown ? '(undoable)' : '(no down)'}</Text>
+              </Text>
+              {m.summary.map((line, k) => (
+                <Text key={`${m.path}-${k}`} dimColor>
+                  {'    '}
+                  {line}
+                </Text>
+              ))}
+              <Button key={`mo-${m.path}`} label={`${open.has(`sql:${m.path}`) ? '▾ Hide' : '▸ Show'} the SQL`} plain onPress={flip(`sql:${m.path}`)} />
+              {open.has(`sql:${m.path}`) &&
+                m.sql.split('\n').slice(0, 60).map((line, k) => (
+                  <Text key={`${m.path}-sql-${k}`} dimColor wrap="truncate-end">
+                    {'    '}
+                    {line}
+                  </Text>
+                ))}
+            </Box>
           ))}
         </Box>
         <Box flexDirection="column">
-          <Text bold>New variables</Text>
+          <Text bold>Variables</Text>
           {report.vars.length === 0 && <Text dimColor>No new variables.</Text>}
           {report.vars.map(found => (
-            <Text color={found.target ? undefined : 'warning'}>
-              ● {found.name}{' '}
-              <Text dimColor>
-                · {found.target ? `load it in ${found.target}` : 'unknown where it is loaded'} · {found.file}
+            <Box key={`v-${found.name}`} flexDirection="column">
+              <Text color={found.status === 'removed' ? 'error' : found.target ? undefined : 'warning'}>
+                ● {found.name}{' '}
+                <Text dimColor>
+                  · {found.status === 'removed' ? 'no longer read: delete it' : found.target ? `load it in ${found.target}` : 'unknown where it is loaded'}
+                  {found.envs?.length ? ` (${found.envs.join(', ')})` : ''} · {found.file}
+                </Text>
               </Text>
-            </Text>
+              <Button key={`vo-${found.name}`} label={`${open.has(`var:${found.name}`) ? '▾ Hide' : '▸ Details'}`} plain onPress={flip(`var:${found.name}`)} />
+              {open.has(`var:${found.name}`) && (
+                <Box flexDirection="column" marginLeft={2}>
+                  {found.status !== 'removed' && (
+                    <Text dimColor>{found.fallback != null ? `optional: falls back to "${found.fallback}"` : 'required: the code has no fallback'}</Text>
+                  )}
+                  {(found.uses ?? []).map((use, k) => (
+                    <Text key={`${found.name}-u${k}`} wrap="truncate-end">
+                      <Text dimColor>
+                        {use.file}
+                        {use.line ? `:${use.line}` : ''}{' '}
+                      </Text>
+                      {use.code}
+                    </Text>
+                  ))}
+                  {found.command?.split('\n').map((line, k) => (
+                    <Text key={`${found.name}-c${k}`} color={CORAL}>
+                      $ {line}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+            </Box>
           ))}
         </Box>
         {report.tables.length > 0 && (
           <Box flexDirection="column">
             <Text bold>Table changes</Text>
-            {e.surface === 'desktop' && 'Svg' in ui
-              ? (() => {
-                  const W = Math.max(280, Math.min(900, (e.props.bodyColumns || 60) * 8 - 24))
-                  const drawn = tablesSvg(W, report.tables)
-                  const { Svg } = ui
-                  return <Svg key="tables" source={drawn.source} alt={`Changed tables: ${report.tables.map(t => t.table).join(', ')}`} width={W} height={drawn.height} />
-                })()
-              : report.tables.map(table => tableRows(Box, Text, table))}
+            {report.tables.map(table => tableRows(Box, Text, table))}
             {report.skipped > 0 && <Text dimColor>{report.skipped} statements not read (indexes, data, functions)</Text>}
           </Box>
         )}
-        <Box flexDirection="row" gap={1}>
-          {refreshButton}
-          {gaps && <Button key="ask" label="Ask Claude to fill the gaps" onPress={() => void $.prompt.submit({ text: gaps, asUser: true })} />}
-        </Box>
+        {bottom}
       </Box>
     )
   })

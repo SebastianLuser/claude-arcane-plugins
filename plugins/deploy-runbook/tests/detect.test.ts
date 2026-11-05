@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildReport, changedFiles, deploySteps, isDeployFile, isPatchable, loadTarget, migrationMode, newVars } from '../hooks/detect'
+import { buildReport, changedFiles, deploySteps, isDeployFile, isPatchable, loadTarget, migrationMode, newVars, summaryOf } from '../hooks/detect'
+import { commandsFor, environmentsOf } from '../hooks/envs'
 import type { RepoFile } from '../hooks/detect'
 
 const INCLUSION: RepoFile[] = [
@@ -71,8 +72,9 @@ describe('migrationMode', () => {
       kind: 'auto',
       text: 'They run when the service starts',
       source: 'entrypoint.sh',
+      command: 'migrate -path db/migrations -database "$DATABASE_URL" up',
     })
-    expect(migrationMode('store-security-be', SEGURIDAD, {}).source).toBe('deploy/railway-entrypoint.sh')
+    expect(migrationMode('store-security-be', SEGURIDAD, {})).toMatchObject({ source: 'deploy/railway-entrypoint.sh', command: '/app/migrate up' })
   })
 
   test('should name the RUN_MIGRATIONS flag when the config reads it', () => {
@@ -96,6 +98,7 @@ describe('migrationMode', () => {
       kind: 'manual',
       text: 'By hand: run the deploy-prod.yml workflow with DB_MIGRATION-up checked',
       source: '.github/workflows/deploy-prod.yml',
+      command: 'gh workflow run deploy-prod.yml -f DB_MIGRATION-up=true',
     })
   })
 
@@ -106,6 +109,7 @@ describe('migrationMode', () => {
       kind: 'unknown',
       text: 'Unknown whether the deploy runs them: there is a script in scripts/migrate.sh',
       source: 'scripts/migrate.sh',
+      command: 'sh scripts/migrate.sh',
     })
   })
 
@@ -143,10 +147,10 @@ describe('newVars', () => {
     ]
 
     expect(newVars(patches)).toEqual([
-      { name: 'FOO_URL', file: '.env.example' },
-      { name: 'SMTP_HOST', file: 'config/config.go' },
-      { name: 'SMTP_PORT', file: 'config/config.go' },
-      { name: 'VITE_API_URL', file: 'src/env.ts' },
+      { name: 'FOO_URL', file: '.env.example', status: 'new' },
+      { name: 'SMTP_HOST', file: 'config/config.go', status: 'new' },
+      { name: 'SMTP_PORT', file: 'config/config.go', status: 'new' },
+      { name: 'VITE_API_URL', file: 'src/env.ts', status: 'new' },
     ])
   })
 
@@ -159,7 +163,7 @@ describe('newVars', () => {
 
     const found = newVars(patches)
 
-    expect(found).toEqual([{ name: 'PUBLIC_URL', file: '.env.example' }])
+    expect(found).toEqual([{ name: 'PUBLIC_URL', file: '.env.example', status: 'new' }])
     expect(JSON.stringify(found)).not.toContain('real-host')
     expect(isPatchable('.env')).toBe(false)
     expect(isPatchable('apps/web/.env.production')).toBe(false)
@@ -215,7 +219,19 @@ describe('buildReport', () => {
       base: 'origin/main',
       migrations: ['packages/dbconn/migrations/000030_add_slug.up.sql'],
       mode: { kind: 'flag', text: 'They run on startup; RUN_MIGRATIONS=false turns them off', source: 'config/config.go' },
-      vars: [{ name: 'SLUG_BASE_URL', file: '.env.example', target: 'Railway' }],
+      vars: [
+        {
+          name: 'SLUG_BASE_URL',
+          file: '.env.example',
+          status: 'new',
+          target: 'Railway',
+          uses: [{ file: '.env.example', line: null, code: 'SLUG_BASE_URL=…' }],
+          fallback: null,
+          examples: ['.env.example'],
+          envs: [],
+          command: 'railway variables --set "SLUG_BASE_URL=..."',
+        },
+      ],
       tables: [
         {
           table: 'courses',
@@ -231,7 +247,17 @@ describe('buildReport', () => {
       risks: [],
       consumers: [{ repo: 'reports-web', kind: 'db', file: '.env.example' }],
       info: { commits: 2, files: 3, unpushed: 0 },
+      envs: [],
+      details: [
+        {
+          path: 'packages/dbconn/migrations/000030_add_slug.up.sql',
+          summary: ['Adds slug (TEXT) to courses'],
+          hasDown: true,
+          sql: 'ALTER TABLE courses ADD COLUMN slug TEXT;',
+        },
+      ],
     })
+    expect(JSON.stringify(report)).not.toContain('example.com')
   })
 
   test('should leave the migration mode out when the branch has no migrations', () => {
@@ -302,7 +328,8 @@ describe('risks and steps', () => {
       'deploy',
       'check:snake-leaderboard',
     ])
-    expect(deploySteps(report)[0]).toEqual({ id: 'push', text: 'Push feat/scores', detail: 'it has no upstream yet' })
+    expect(deploySteps(report)[0]).toEqual({ id: 'push', text: 'Push feat/scores', detail: 'it has no upstream yet', command: 'git push -u origin feat/scores' })
+    expect(deploySteps(report)[1]!.command).toBe('pg_dump "$DATABASE_URL" -t players -f backup-feat-scores.sql')
     expect(deploySteps(report)[5]!.detail).toBe('it reads this database (.env.example)')
   })
 
@@ -316,5 +343,71 @@ describe('risks and steps', () => {
     expect(ids.indexOf('deploy')).toBeLessThan(ids.indexOf('migrate'))
     expect(ids).not.toContain('push')
     expect(ids).not.toContain('backup')
+  })
+})
+
+describe('environments and variables', () => {
+  const WORKFLOWS: RepoFile[] = [
+    { path: '.github/workflows/deploy.yml', text: 'jobs:\n  prod:\n    environment: production\n    steps:\n      - run: echo ${{ secrets.MAIL_KEY }}\n  stg:\n    environment:\n      name: stg\n' },
+    { path: '.env.qa.example', text: 'MAIL_KEY=\nREPORTS_URL=' },
+  ]
+
+  test('should read the environments from the workflows, per-environment examples and railway.json', () => {
+    const railway = [{ path: 'railway.json', text: '{ "environments": { "production": {}, "dev": {} } }' }]
+
+    expect(environmentsOf(WORKFLOWS, ['.env.qa.example', '.env.local.example', '.env.example'])).toEqual(['qa', 'staging', 'production'])
+    expect(environmentsOf(railway, [])).toEqual(['development', 'production'])
+    expect(environmentsOf([], ['.env.example'])).toEqual([])
+  })
+
+  test('should explain each variable: where it is read, whether it has a fallback and how to load it', () => {
+    const report = buildReport({
+      repo: 'mailer',
+      branch: 'feat/mail',
+      base: 'origin/main',
+      nameStatus: 'M\tsrc/config.ts\nM\tsrc/old.ts',
+      patches: [
+        { path: 'src/config.ts', text: '@@ -10,0 +11,2 @@\n+const key = process.env.MAIL_KEY\n+const port = process.env.MAIL_PORT ?? "587"' },
+        { path: 'src/old.ts', text: '@@ -4 +3,0 @@\n-const legacy = process.env.LEGACY_SMTP\n-const shared = process.env.SHARED_URL' },
+      ],
+      migrationTexts: [],
+      repoFiles: WORKFLOWS,
+      corrections: {},
+      trackedPaths: ['.env.qa.example'],
+      consumers: [],
+      info: { commits: 1, files: 2, unpushed: 0 },
+      stillUsed: ['SHARED_URL'],
+    })
+    const byName = Object.fromEntries(report.vars.map(v => [v.name, v]))
+
+    expect(Object.keys(byName)).toEqual(['MAIL_KEY', 'MAIL_PORT', 'LEGACY_SMTP'])
+    expect(byName.MAIL_KEY).toMatchObject({
+      target: 'GitHub (secrets)',
+      uses: [{ file: 'src/config.ts', line: 11, code: 'const key = process.env.MAIL_KEY' }],
+      fallback: null,
+      envs: ['qa', 'staging', 'production'],
+      command: 'gh secret set MAIL_KEY --env qa\ngh secret set MAIL_KEY --env staging\ngh secret set MAIL_KEY --env production',
+    })
+    expect(byName.MAIL_PORT).toMatchObject({ fallback: '587', uses: [{ line: 12 }] })
+    expect(byName.LEGACY_SMTP).toMatchObject({ status: 'removed', uses: [] })
+
+    const steps = deploySteps(report)
+    expect(steps.map(s => s.id)).toEqual(['var:MAIL_KEY', 'var:MAIL_PORT', 'deploy', 'rm:LEGACY_SMTP'])
+    expect(steps[0]!.detail).toBe('required: the code has no fallback')
+    expect(steps[1]!.detail).toBe('optional: falls back to "587" · where to load it is not detected')
+  })
+
+  test('should write Railway and Vercel commands without a value', () => {
+    expect(commandsFor({ name: 'API_URL', target: 'Railway', status: 'new' }, ['staging', 'production'])).toBe(
+      'railway variables --set "API_URL=..." --environment staging\nrailway variables --set "API_URL=..." --environment production',
+    )
+    expect(commandsFor({ name: 'API_URL', target: 'Vercel', status: 'removed' }, [])).toBe('vercel env rm API_URL production --yes')
+    expect(commandsFor({ name: 'API_URL', target: null, status: 'new' }, ['production'])).toBeNull()
+  })
+
+  test('should explain each migration in plain sentences', () => {
+    expect(
+      summaryOf('CREATE TABLE scores (id int, player_id int REFERENCES players(id)); ALTER TABLE players RENAME nick TO name; CREATE INDEX i ON scores(id);'),
+    ).toEqual(['Creates table scores with 2 columns', 'Links scores.player_id to players', 'Renames players.nick to name', '1 other statement (indexes, data, functions)'])
   })
 })

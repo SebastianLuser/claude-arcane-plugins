@@ -1,4 +1,5 @@
-import type { BranchInfo, Consumer, MigrationMode, NewVar, Report, Risk, Step, TableChange } from '../types'
+import type { BranchInfo, Consumer, MigrationInfo, MigrationMode, NewVar, Report, Risk, Step, TableChange } from '../types'
+import { commandsFor, envsFor, environmentsOf, examplesOf, fallbackOf, usesOf } from './envs'
 import { migrationRisks, schemaOf, tableChanges } from './sql'
 
 export type Corrections = {
@@ -23,6 +24,8 @@ export type ReportInput = {
   info: BranchInfo
   /** The repo's migrations from before this branch, to draw each table as it was. */
   earlierMigrations?: RepoFile[]
+  /** Variables the branch stops reading that other code of the repo still reads. */
+  stillUsed?: string[]
 }
 
 /** Earlier migrations in the order they ran: by file name, which is how the tools number them. */
@@ -32,11 +35,11 @@ export function inRunOrder(files: RepoFile[]): RepoFile[] {
 }
 
 const ENV_FILE = /(^|\/)\.env(\.[^/]+)?$/i
-const ENV_EXAMPLE = /(^|\/)\.env\.example$/i
+const ENV_EXAMPLE = /(^|\/)\.env(\.[\w-]+)*\.(example|sample|template)$/i
 const CODE_FILE = /\.(go|ts|tsx|js|jsx|mjs|cjs)$/i
 const TEST_FILE = /(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$/i
 const DEPLOY_FILE =
-  /(^|\/)([\w.-]*entrypoint[\w.-]*\.sh|Dockerfile[\w.-]*|railway\.(json|toml)|Procfile|nixpacks\.toml|vercel\.json|[Mm]akefile)$|^\.github\/workflows\/[^/]+\.ya?ml$|(^|\/)scripts\/[^/]*migrat[^/]*$/
+  /(^|\/)([\w.-]*entrypoint[\w.-]*\.sh|Dockerfile[\w.-]*|railway\.(json|toml)|Procfile|nixpacks\.toml|vercel\.json|[Mm]akefile)$|^\.github\/workflows\/[^/]+\.ya?ml$|(^|\/)scripts\/[^/]*migrat[^/]*$|(^|\/)package\.json$/
 const STARTUP_FILE = /(^|\/)([\w.-]*entrypoint[\w.-]*\.sh|Dockerfile[\w.-]*|railway\.(json|toml)|Procfile|nixpacks\.toml)$/
 const MIGRATE_UP = /\bmigrate\b.*\bup\b/
 const IN_CODE = /migrate\.New\w*\(|RunMigrations\(|goose\.Up\(/
@@ -62,8 +65,11 @@ export function isPatchable(path: string): boolean {
   return CODE_FILE.test(path) && !TEST_FILE.test(path)
 }
 
+/** Files read to see how the repo deploys: CI, startup files, scripts and the example env files, never a real `.env`. */
 export function isDeployFile(path: string): boolean {
-  return !path.startsWith('.claude/') && !ENV_FILE.test(path) && DEPLOY_FILE.test(path)
+  if (path.startsWith('.claude/')) return false
+  if (ENV_EXAMPLE.test(path)) return true
+  return !ENV_FILE.test(path) && DEPLOY_FILE.test(path)
 }
 
 export function changedFiles(nameStatus: string): { status: string; path: string }[] {
@@ -92,20 +98,23 @@ function namesIn(path: string, line: string): string[] {
   return CODE_VARS.flatMap(pattern => [...line.matchAll(pattern)].map(match => match[1]!))
 }
 
-export function newVars(patches: RepoFile[]): { name: string; file: string }[] {
+/** Variables the branch starts reading, and those it stops reading (`removed`). */
+export function newVars(patches: RepoFile[]): { name: string; file: string; status: 'new' | 'removed' }[] {
   const added = new Map<string, string>()
-  const removed = new Set<string>()
+  const removed = new Map<string, string>()
   for (const { path, text } of patches) {
     if (!isPatchable(path)) continue
     for (const line of text.split('\n')) {
       if (line.startsWith('+++') || line.startsWith('---')) continue
       if (line.startsWith('+')) for (const name of namesIn(path, line.slice(1))) if (!added.has(name)) added.set(name, path)
-      if (line.startsWith('-')) for (const name of namesIn(path, line.slice(1))) removed.add(name)
+      if (line.startsWith('-')) for (const name of namesIn(path, line.slice(1))) if (!removed.has(name)) removed.set(name, path)
     }
   }
-  return [...added]
-    .filter(([name]) => !removed.has(name) && !BUILT_IN_VARS.has(name))
-    .map(([name, file]) => ({ name, file }))
+  const keep = (name: string) => !BUILT_IN_VARS.has(name)
+  return [
+    ...[...added].filter(([name]) => !removed.has(name) && keep(name)).map(([name, file]) => ({ name, file, status: 'new' as const })),
+    ...[...removed].filter(([name]) => !added.has(name) && keep(name)).map(([name, file]) => ({ name, file, status: 'removed' as const })),
+  ]
 }
 
 function codeLines(text: string): string[] {
@@ -126,7 +135,8 @@ function deployWorkflowMode(files: RepoFile[]): MigrationMode | null {
   const text = condition
     ? `${isManual ? 'By hand: ' : ''}run the ${name} workflow with ${condition[1]} checked`
     : `They run in the ${name} workflow`
-  return { kind: isManual ? 'manual' : 'auto', text, source: workflow.path }
+  const command = isManual ? `gh workflow run ${name}${condition ? ` -f ${condition[1]}=true` : ''}` : null
+  return { kind: isManual ? 'manual' : 'auto', text, source: workflow.path, command }
 }
 
 export function migrationMode(repo: string, files: RepoFile[], corrections: Corrections): MigrationMode {
@@ -141,16 +151,40 @@ export function migrationMode(repo: string, files: RepoFile[], corrections: Corr
   if (workflow) return workflow
 
   const startup = files.find(file => STARTUP_FILE.test(file.path) && codeLines(file.text).some(line => MIGRATE_UP.test(line)))
-  if (startup) return { kind: 'auto', text: 'They run when the service starts', source: startup.path }
+  if (startup) {
+    // A log line ("echo migrating ... up") names no command.
+    const line = codeLines(startup.text).find(l => MIGRATE_UP.test(l) && !/^\s*(echo|printf)\b/.test(l))
+    return { kind: 'auto', text: 'They run when the service starts', source: startup.path, command: (line && /\S*migrate\b.*?\bup\b/.exec(line)?.[0]) || null }
+  }
 
   const inCode = code.find(file => codeLines(file.text).some(line => IN_CODE.test(line)))
   if (inCode) return { kind: 'auto', text: 'The app runs them from its code on startup', source: inCode.path }
 
   const script = files.find(file => /(^|\/)scripts\/[^/]*migrat[^/]*$/.test(file.path) && /\bmigrations\b/.test(file.text))
   if (script) {
-    return { kind: 'unknown', text: `Unknown whether the deploy runs them: there is a script in ${script.path}`, source: script.path }
+    return { kind: 'unknown', text: `Unknown whether the deploy runs them: there is a script in ${script.path}`, source: script.path, command: script.path.endsWith('.sh') ? `sh ${script.path}` : script.path }
   }
+  const named = namedCommand(files)
+  if (named) return { kind: 'unknown', text: `Unknown whether the deploy runs them: ${named.source} has a migrate command`, source: named.source, command: named.command }
   return { kind: 'unknown', text: 'Not detected: add it in corrections.json', source: null }
+}
+
+/** A Makefile target or package.json script whose name says it migrates. */
+function namedCommand(files: RepoFile[]): { command: string; source: string } | null {
+  for (const file of files) {
+    if (/(^|\/)[Mm]akefile$/.test(file.path)) {
+      const target = /^([\w-]*migrat[\w-]*(?:-up)?)\s*:/m.exec(file.text)
+      if (target) return { command: `make ${target[1]}`, source: file.path }
+    }
+    if (/(^|\/)package\.json$/.test(file.path)) {
+      try {
+        const scripts = (JSON.parse(file.text) as { scripts?: Record<string, unknown> }).scripts ?? {}
+        const name = Object.keys(scripts).find(key => /migrat/i.test(key) && !/(down|rollback|create|new|make|gen)/i.test(key))
+        if (name) return { command: `npm run ${name}`, source: file.path }
+      } catch {}
+    }
+  }
+  return null
 }
 
 // TODO(@SebastianLuser, 2026-10-28): a monorepo with Railway and Vercel apps gets Railway for every variable; match the file's app folder.
@@ -199,10 +233,22 @@ export function buildReport(input: ReportInput): Report {
     const before = schemaOf(inRunOrder(input.earlierMigrations).map(file => file.text))
     for (const table of tables.values()) table.before = table.isNew ? null : (before.get(table.table) ?? null)
   }
-  const vars: NewVar[] = newVars(input.patches).map(found => ({
-    ...found,
-    target: loadTarget(found.name, input.repo, input.repoFiles, input.corrections),
-  }))
+  const envs = environmentsOf(input.repoFiles, input.trackedPaths)
+  const stillUsed = new Set(input.stillUsed ?? [])
+  const vars: NewVar[] = newVars(input.patches)
+    .filter(found => found.status === 'new' || !stillUsed.has(found.name))
+    .map(found => {
+      const uses = found.status === 'new' ? usesOf(found.name, input.patches) : []
+      const v = {
+        ...found,
+        target: loadTarget(found.name, input.repo, input.repoFiles, input.corrections),
+        uses,
+        fallback: fallbackOf(found.name, uses),
+        examples: examplesOf(uses),
+        envs: envsFor(found.name, input.repoFiles, input.trackedPaths, envs),
+      }
+      return { ...v, command: commandsFor(v, v.envs) }
+    })
   const tracked = new Set(input.trackedPaths)
   const risks: Risk[] = input.migrationTexts
     .filter(({ path }) => isMigration(path))
@@ -215,6 +261,9 @@ export function buildReport(input: ReportInput): Report {
       return found
     })
     .sort((a, b) => Number(b.level === 'high') - Number(a.level === 'high'))
+  const details: MigrationInfo[] = input.migrationTexts
+    .filter(({ path }) => isMigration(path))
+    .map(({ path, text }) => ({ path, summary: summaryOf(text), hasDown: tracked.has(downPath(path)) || IN_FILE_DOWN.test(text), sql: text.slice(0, 6000) }))
   return {
     repo: input.repo,
     branch: input.branch,
@@ -227,7 +276,29 @@ export function buildReport(input: ReportInput): Report {
     risks,
     consumers: migrations.length > 0 ? input.consumers : input.consumers.filter(c => c.kind === 'http'),
     info: input.info,
+    envs,
+    details,
   }
+}
+
+/** What a migration does, one plain sentence per change. */
+export function summaryOf(sql: string): string[] {
+  const { tables, skipped } = tableChanges(sql)
+  const lines: string[] = []
+  for (const t of tables) {
+    if (t.isDropped) {
+      lines.push(`Drops table ${t.table}`)
+      continue
+    }
+    if (t.isNew) lines.push(`Creates table ${t.table} with ${plural(t.added.length, 'column')}`)
+    else for (const c of t.added) lines.push(`Adds ${c.name}${c.type ? ` (${c.type})` : ''} to ${t.table}`)
+    for (const c of t.dropped) lines.push(`Drops ${c} from ${t.table}`)
+    for (const r of t.renamed) lines.push(`Renames ${t.table}.${r.from} to ${r.to}`)
+    for (const c of t.retyped ?? []) lines.push(`Changes ${t.table}.${c.name} to ${c.type}`)
+    for (const fk of t.foreignKeys) lines.push(`Links ${t.table}.${fk.column} to ${fk.table}`)
+  }
+  if (skipped > 0) lines.push(`${plural(skipped, 'other statement')} (indexes, data, functions)`)
+  return lines
 }
 
 // goose and dbmate keep the down part inside the same file.
@@ -246,20 +317,37 @@ export function deploySteps(report: Report): Step[] {
   const steps: Step[] = []
   const { unpushed } = report.info
   if (unpushed !== 0) {
-    steps.push({ id: 'push', text: `Push ${report.branch}`, detail: unpushed === null ? 'it has no upstream yet' : `${plural(unpushed, 'commit')} not pushed` })
+    steps.push({
+      id: 'push',
+      text: `Push ${report.branch}`,
+      detail: unpushed === null ? 'it has no upstream yet' : `${plural(unpushed, 'commit')} not pushed`,
+      command: unpushed === null ? `git push -u origin ${report.branch}` : 'git push',
+    })
   }
   if (report.risks.some(risk => risk.level === 'high')) {
-    steps.push({ id: 'backup', text: 'Back up the tables the migrations touch', detail: 'a migration drops or rewrites data' })
+    const touched = report.tables.filter(t => !t.isNew).map(t => t.table)
+    steps.push({
+      id: 'backup',
+      text: 'Back up the tables the migrations touch',
+      detail: 'a migration drops or rewrites data',
+      command: touched.length > 0 ? `pg_dump "$DATABASE_URL" ${touched.map(t => `-t ${t}`).join(' ')} -f backup-${report.branch.replace(/[^\w-]+/g, '-')}.sql` : null,
+    })
   }
-  for (const found of report.vars) {
-    steps.push({ id: `var:${found.name}`, text: `Load ${found.name}${found.target ? ` in ${found.target}` : ''}`, detail: found.target ? null : 'where is not detected' })
+  const where = (v: NewVar) => `${v.target ? ` in ${v.target}` : ''}${v.envs?.length ? ` (${v.envs.join(', ')})` : ''}`
+  for (const found of report.vars.filter(v => v.status !== 'removed')) {
+    const need = found.fallback != null ? `optional: falls back to "${found.fallback}"` : 'required: the code has no fallback'
+    const detail = found.target ? need : `${need} · where to load it is not detected`
+    steps.push({ id: `var:${found.name}`, text: `Load ${found.name}${where(found)}`, detail, command: found.command ?? null })
   }
   const mode = report.mode
   const isByHand = mode?.kind === 'manual' || mode?.kind === 'unknown'
   const count = plural(report.migrations.length, 'migration')
-  if (mode && isByHand) steps.push({ id: 'migrate', text: `Apply ${count} before deploying`, detail: mode.text })
+  if (mode && isByHand) steps.push({ id: 'migrate', text: `Apply ${count} before deploying`, detail: mode.text, command: mode.command ?? null })
   steps.push({ id: 'deploy', text: `Deploy ${report.branch}`, detail: null })
   if (mode && !isByHand) steps.push({ id: 'migrate', text: `Check the ${count} ran`, detail: mode.text })
+  for (const gone of report.vars.filter(v => v.status === 'removed')) {
+    steps.push({ id: `rm:${gone.name}`, text: `Delete ${gone.name}${where(gone)}`, detail: 'nothing reads it after this deploy', command: gone.command ?? null })
+  }
   for (const consumer of report.consumers) {
     steps.push({
       id: `check:${consumer.repo}`,

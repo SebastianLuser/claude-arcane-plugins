@@ -8,8 +8,9 @@ const VIOLET = '#B138C1'
 const MARK: Record<RowKind, string> = { added: '+', dropped: '−', changed: '~', same: '', note: '' }
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
 const MONO = "ui-monospace,'Cascadia Mono',Consolas,monospace"
-const CSS = `<style>.t{fill:#1f1f1f}.s{fill:#6b6b68}.card{fill:#fff;stroke:#e4e4e1}.head{fill:#f4f3f0}
-@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.card{fill:#1f1f1e;stroke:#333331}.head{fill:#262625}}</style>`
+// The deck's palette, as the rest of the pane.
+const CSS = `<style>.t{fill:#1E1B18}.s{fill:#5E574F}.card{fill:#FBF8F2;stroke:#DDD4C6}.head{fill:#F2EDE4}
+@media (prefers-color-scheme: dark){.t{fill:#EDE6DA}.s{fill:#A69C8F}.card{fill:#24201C;stroke:#3A342D}.head{fill:#2B2621}}</style>`
 const HEADER = 32
 const ROW = 22
 const GAP = 14

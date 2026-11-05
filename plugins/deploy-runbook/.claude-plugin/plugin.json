@@ -1,7 +1,7 @@
 {
   "name": "deploy-runbook",
-  "version": "0.4.1",
-  "description": "When you open or review a PR, shows how the repo runs its migrations, which new variables to load and what changes in each table.",
+  "version": "0.5.0",
+  "description": "When you open or review a PR: the deploy steps with their commands, each variable per environment (required or optional, where the code reads it), each migration explained with its risks and SQL, and the tables it changes.",
   "author": { "name": "sebas" },
   "types": "./types/index.d.ts"
 }
